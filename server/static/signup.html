@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Login</title>
+    <meta charset="utf-8" />
+    <script>
+        async function try_signup() {
+            const element = document.getElementById("signup_form");
+            const form_data = new FormData(element);
+            const data = new URLSearchParams(form_data);
+            var response = await fetch("/sign-up", {
+                method: "POST",
+                body: data
+            });
+            if (response.ok) {
+                alert("Signup successful! Please check your email to verify your account.");
+            } else if (response.status == 409) {
+                alert("Username already taken. Please choose another.");
+            } else {
+                alert("Signup failed. Please try again.");
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <h1>signup</h1>
+    <form id="signup_form" action="javascript:try_signup()" method="post">
+        <label for="fname">user:</label>
+        <input type="text" id="username_" name="username"><br><br>
+        <label for="lname">password:</label>
+        <input type="password" id="password_" name="password"><br><br>
+        <label for="lemail">email:</label>
+        <input type="email" id="email_" name="email"><br><br>
+        <input type="submit" , value="Sign Up">
+    </form>
+    already have an account? <a href="./index.html"> go to login</a>
+</body>
+
+</html>

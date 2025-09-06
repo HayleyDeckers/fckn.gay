@@ -1,0 +1,11 @@
+[package]
+name = "fckn-gay-email"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fckn-gay-email-interface = { path = "./interface" }
+fckn-gay-email-lettre = { path = "./implementors/lettre" }
+fckn-gay-email-stdout = { path = "./implementors/stdout" }
+
+serde.workspace = true

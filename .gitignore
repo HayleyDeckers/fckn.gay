@@ -1,0 +1,8 @@
+/target
+# might contain secrets
+config.toml
+# database files, clutter
+*.csv
+#  local notes
+notes.md
+TODO.md

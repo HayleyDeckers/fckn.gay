@@ -1,0 +1,11 @@
+[package]
+name = "fckn-gay-user-database"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fckn-gay-user-database-interface = { path = "./interface" }
+fckn-gay-user-database-hardcoded = { path = "./implementors/hardcoded" }
+fckn-gay-user-database-csv = { path = "./implementors/csv" }
+
+serde.workspace = true

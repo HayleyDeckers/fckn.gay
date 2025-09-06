@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <script>
+        async function populate() {
+            var table = document.getElementById("dns");
+            var response = await fetch("/u/records");
+            var records = await response.json();
+
+            table.innerHTML = "<tr><th>record</th><th>type</th><th>content</th></tr>";
+            for (var i = 0; i < records.length; i++) {
+                var row = table.appendChild(document.createElement("tr"));
+                var cell1 = row.appendChild(document.createElement("td"));
+                var cell2 = row.appendChild(document.createElement("td"));
+                var cell3 = row.appendChild(document.createElement("td"));
+                cell1.innerHTML = records[i].name;
+                cell2.innerHTML = records[i].record_type;
+                cell3.innerHTML = records[i].content;
+            }
+        }
+    </script>
+</head>
+
+<body onload="populate()">
+    <p id="message"></p>
+    <table id="dns">
+        <tr>
+            <th>record</th>
+            <th>type</th>
+            <th>content</th>
+        </tr>
+    </table>
+    </br>
+
+</body>
+
+</html>

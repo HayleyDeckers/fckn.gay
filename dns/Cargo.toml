@@ -1,0 +1,11 @@
+[package]
+name = "fckn-gay-dns"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fckn-gay-dns-interface = { path = "./interface" }
+fckn-gay-dns-porkbun = { path = "./implementors/porkbun" }
+fckn-gay-dns-dummy = { path = "./implementors/dummy" }
+
+serde.workspace = true

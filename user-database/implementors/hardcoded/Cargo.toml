@@ -1,0 +1,10 @@
+[package]
+name = "fckn-gay-user-database-hardcoded"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fckn-gay-user-database-interface = { path = "../../interface" }
+serde.workspace = true
+uuid.workspace = true
+tokio = { workspace = true, features = ["sync"] }

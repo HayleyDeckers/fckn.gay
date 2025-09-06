@@ -1,0 +1,18 @@
+[package]
+name = "fckn-gay-email-stdout"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fckn-gay-email-interface = { path = "../../interface" }
+serde.workspace = true
+lettre = { workspace = true, features = [
+    "tokio1",
+    "builder",
+    "hostname",
+    "pool",
+    "smtp-transport",
+    "tokio1-rustls",
+    "rustls-platform-verifier",
+    "aws-lc-rs",
+] }

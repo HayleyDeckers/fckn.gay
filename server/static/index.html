@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Login</title>
+    <meta charset="utf-8" />
+    <script>
+        async function try_login() {
+            const element = document.getElementById("login_form");
+            const form_data = new FormData(element);
+            const data = new URLSearchParams(form_data);
+            var response = await fetch("/login", {
+                method: "POST",
+                body: data
+            });
+            if (response.ok) {
+                window.location.href = "/u/view.html";
+            } else {
+                alert("Login failed. Please try again.");
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <h1>login required</h1>
+    <form id="login_form" action="javascript:try_login()"" method=" post">
+        <label for=" fname">user:</label>
+        <input type="text" id="username_" name="username"><br><br>
+        <label for="lname">password:</label>
+        <input type="password" id="password_" name="password"><br><br>
+        <input type="submit" , value="Login">
+    </form>
+
+    or <a href="./signup.html">signup</a>
+</body>
+
+</html>

@@ -1,0 +1,9 @@
+[package]
+name = "fckn-gay-dns-porkbun"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fckn-gay-dns-interface = { path = "../../interface" }
+porkbun-api = { workspace = true, features = ["default-client"] }
+serde.workspace = true
