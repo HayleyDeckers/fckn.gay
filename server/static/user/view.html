@@ -2,14 +2,31 @@
 <html>
 
 <head>
+    <link rel="stylesheet" href="../style.css">
     <meta charset="utf-8" />
     <script>
         async function populate() {
             var table = document.getElementById("dns");
+            // Show spinner and empty row
+            table.innerHTML = `<tr><th>record</th><th>type</th><th>content</th></tr>
+                <tr id="spinner-row">
+                    <td colspan="3" style="text-align:center; height: 3em;">
+                        <div class="spinner"></div>
+                    </td>
+                </tr>`;
+
+
             var response = await fetch("/u/records");
             var records = await response.json();
 
             table.innerHTML = "<tr><th>record</th><th>type</th><th>content</th></tr>";
+            if (records.length === 0) {
+                var emptyRow = table.appendChild(document.createElement("tr"));
+                var emptyCell = emptyRow.appendChild(document.createElement("td"));
+                emptyCell.colSpan = 3;
+                emptyCell.style.textAlign = "center";
+                emptyCell.innerHTML = "No records found.";
+            }
             for (var i = 0; i < records.length; i++) {
                 var row = table.appendChild(document.createElement("tr"));
                 var cell1 = row.appendChild(document.createElement("td"));
@@ -26,12 +43,55 @@
 <body onload="populate()">
     <p id="message"></p>
     <table id="dns">
-        <tr>
-            <th>record</th>
-            <th>type</th>
-            <th>content</th>
-        </tr>
+        <!-- Table will be populated by JS -->
     </table>
+
+</body>
+
+<style>
+    .cute-plus {
+        font-size: 1.3em;
+        background: linear-gradient(90deg, #ffe7c7 0%, #e0ffe7 100%);
+        color: #ff90b3;
+        border: 2px solid #c7eaff;
+        border-radius: 50%;
+        width: 2em;
+        height: 2em;
+        box-shadow: 0 2px 8px #e0d6ff44;
+        cursor: pointer;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s, transform 0.2s;
+        vertical-align: middle;
+    }
+
+    .cute-plus:hover {
+        background: linear-gradient(90deg, #e0ffe7 0%, #ffe7c7 100%);
+        transform: scale(1.15);
+    }
+
+    .spinner {
+        border: 6px solid #e0f7f7;
+        border-top: 6px solid #d48fa6;
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+</style>
     </br>
 
 </body>

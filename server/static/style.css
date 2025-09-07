@@ -1,0 +1,147 @@
+table {
+    width: 80%;
+    margin: 2em auto;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: #fff6f6cc;
+    border-radius: 24px;
+    box-shadow: 0 4px 24px #c7eaff44;
+    overflow: hidden;
+    font-family: inherit;
+    font-size: 1.1em;
+    border: none;
+    box-shadow: 0 4px 24px #c7eaff44, 0 0 0 6px #e0ffe7cc;
+}
+
+th,
+td {
+    padding: 1em 1.5em;
+    text-align: left;
+    border-bottom: 2px dashed #c7eaff;
+}
+
+th {
+    background: linear-gradient(90deg, #f8e7f0 0%, #e0f7f7 100%);
+    color: #d48fa6;
+    font-size: 1.15em;
+    border-bottom: 3px solid #e0d6ff;
+    text-shadow: 1px 1px 0 #fff6f6, 0 0 4px #e0f7f7;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+tr {
+    transition: background 0.2s, transform 0.2s;
+}
+
+tr:hover {
+    background: #e0ffe7cc;
+    /* transform: scale(1.03) rotate(-1deg); */
+    transform: scale(1.02);
+}
+
+body {
+    font-family: 'Comic Sans MS', 'Comic Sans', 'Chalkboard SE', 'Comic Neue', cursive, sans-serif;
+    background: linear-gradient(135deg, #ffd6e0 0%, #ffe7c7 20%, #e0ffe7 40%, #c7eaff 60%, #e0d6ff 80%, #ffd6e0 100%);
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    color: #444;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+h1,
+h2,
+h3 {
+    font-family: inherit;
+    color: #ff90b3;
+    text-shadow: 2px 2px 0 #fff6f6, 0 0 8px #ffe7c7;
+    margin-top: 1.5em;
+}
+
+a {
+    color: #6ec6ff;
+    text-decoration: none;
+    font-weight: bold;
+    transition: color 0.2s;
+}
+
+a:hover {
+    color: #ff90b3;
+    text-decoration: underline wavy #ff90b3;
+}
+
+button,
+input[type="submit"],
+input[type="button"] {
+    font-family: inherit;
+    background: linear-gradient(90deg, #ffe7c7 0%, #e0ffe7 100%);
+    color: #444;
+    border: 2px solid #ff90b3;
+    border-radius: 20px;
+    padding: 0.6em 1.2em;
+    font-size: 1.1em;
+    box-shadow: 0 2px 8px #e0d6ff44;
+    cursor: pointer;
+    margin: 0.5em;
+    transition: background 0.2s, transform 0.2s;
+}
+
+button:hover,
+input[type="submit"]:hover,
+input[type="button"]:hover {
+    background: linear-gradient(90deg, #e0ffe7 0%, #ffe7c7 100%);
+    transform: scale(1.07) rotate(-2deg);
+}
+
+form {
+    background: #fff6f6cc;
+    border-radius: 24px;
+    box-shadow: 0 4px 24px #c7eaff44;
+    padding: 2em 2.5em;
+    margin: 2em 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1em;
+}
+
+input,
+textarea,
+select {
+    font-family: inherit;
+    border: 2px solid #c7eaff;
+    border-radius: 12px;
+    padding: 0.5em 1em;
+    font-size: 1em;
+    background: #e0ffe7cc;
+    margin-bottom: 0.5em;
+    transition: border-color 0.2s;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: #ff90b3;
+    outline: none;
+}
+
+.rainbow-border {
+    border: 4px solid;
+    border-image: linear-gradient(90deg, #ff90b3, #ffe7c7, #e0ffe7, #c7eaff, #e0d6ff, #ff90b3) 1;
+    border-radius: 24px;
+}
+
+.silly {
+    transform: rotate(-2deg) scale(1.05);
+    background: linear-gradient(120deg, #ffe7c7 0%, #e0ffe7 100%);
+    box-shadow: 0 2px 12px #ff90b344;
+    border: 2px dashed #c7eaff;
+}
+
+/* Add more silly styles as needed! */
