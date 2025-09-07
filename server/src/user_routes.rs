@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::auth_cache::{AuthenticatedFor, add_authorization_or_redirect};
+use crate::{
+    auth_cache::{AuthenticatedFor, add_authorization_or_redirect},
+    error::AppError,
+};
 use axum::{
     Router,
     extract::{Json, State},
@@ -12,18 +15,13 @@ use tokio::sync::Mutex;
 async fn dns_records(
     State(dns): State<Arc<Mutex<Dns>>>,
     authenticed_for: AuthenticatedFor,
-) -> Result<Json<Vec<Record>>, String> {
-    let records = dns
-        .lock()
-        .await
-        .list_records()
-        .await
-        .map_err(|e| format!("Failed to list DNS records: {}", e))?; //todo(hayley): this is still a 200!
+) -> Result<Json<Vec<Record>>, AppError> {
+    let records = dns.lock().await.list_records().await?;
     let pat = format!(".{}.is.fckn.gay", authenticed_for.user_id());
     let filtered_records = records
         .into_iter()
         .filter_map(|(_, record)| {
-            if record.name.starts_with(&pat) || record.name == pat[1..] {
+            if record.name.ends_with(&pat) || record.name == pat[1..] {
                 Some(record)
             } else {
                 None
