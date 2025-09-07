@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use fckn_gay_user_database_interface::{UserDatabase, UserEntry, UserState, Uuid};
 

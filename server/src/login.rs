@@ -31,7 +31,7 @@ pub async fn login(
         let token = auth_cache
             .new_token_for(
                 form.username,
-                Instant::now() + std::time::Duration::from_secs(60),
+                Instant::now() + std::time::Duration::from_hours(4),
             )
             .await
             .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;

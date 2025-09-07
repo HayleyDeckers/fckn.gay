@@ -29,18 +29,23 @@ impl Dns for DummyDns {
     /// Adds a DNS record to the provider.
     async fn add_record(&self, record: Record) -> Result<Self::Key, Self::Error> {
         let mut entries = self.entries.lock().await;
-        if let Some((i, _)) = entries
-            .iter()
-            .filter_map(|r| r.as_ref())
+        if let Some((i, entry)) = entries
+            .iter_mut()
+            .filter_map(|r| r.as_mut())
             .enumerate()
             .find(|(_, r)| r.name == record.name && r.record_type == record.record_type)
         {
+            //already exists, overwrite
+            // todo: should maybe error instead?
+            *entry = record;
             return Ok(i);
         }
-        if let Some((i, r)) = entries.iter_mut().enumerate().find(|(_, r)| r.is_some()) {
+        if let Some((i, r)) = entries.iter_mut().enumerate().find(|(_, r)| r.is_none()) {
+            // overwrite none with some
             *r = Some(record);
             return Ok(i);
         }
+        // add a record
         entries.push(Some(record));
         Ok(entries.len() - 1)
     }

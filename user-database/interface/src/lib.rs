@@ -49,26 +49,29 @@ pub trait UserDatabase {
     where
         Self: Sized;
     /// Checks if a user exists in the database with the given username and password.
-    async fn is_valid(&self, username: &str, password: &str) -> bool;
+    fn is_valid(&self, username: &str, password: &str) -> impl Future<Output = bool>;
 
     /// Checks if a user is available for registration.
-    async fn is_available(&self, username: &str) -> bool;
+    fn is_available(&self, username: &str) -> impl Future<Output = bool>;
+    #[allow(unused_variables)]
     /// Adds a new user to the database with the given username and password.
-    async fn add_user(
+    fn add_user(
         &self,
         username: &str,
         password: &str,
         email: &str,
-    ) -> Result<Uuid, Self::Error> {
-        todo!("add_user is not implemented");
+    ) -> impl Future<Output = Result<Uuid, Self::Error>> {
+        async { todo!("add_user is not implemented") }
     }
 
+    #[allow(unused_variables)]
     /// Deletes a user from the database with the given username.
-    async fn delete_user(&self, username: &str) -> Result<(), Self::Error> {
-        todo!("delete_user is not implemented");
+    fn delete_user(&self, username: &str) -> impl Future<Output = Result<(), Self::Error>> {
+        async { todo!("delete_user is not implemented") }
     }
 
-    async fn activate_user(&self, uuid: Uuid) -> Result<(), Self::Error> {
-        todo!("activate_user is not implemented");
+    #[allow(unused_variables)]
+    fn activate_user(&self, uuid: Uuid) -> impl Future<Output = Result<(), Self::Error>> {
+        async { todo!("activate_user is not implemented") }
     }
 }
