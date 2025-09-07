@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
             tower_http::services::ServeDir::new("server/static")
                 .append_index_html_on_directories(true),
         )
-        .nest("/u", user_routes)
+        .nest("/api", user_routes)
         .with_state(interfaces);
 
     axum::serve(listener, app)

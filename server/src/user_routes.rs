@@ -1,7 +1,24 @@
+use axum::extract::Json as AxumJson;
+use axum::http::StatusCode;
+use fckn_gay_dns::Record as DnsRecord;
+
+async fn add_record_endpoint(
+    State(dns): State<Arc<Mutex<Dns>>>,
+    authenticed_for: AuthenticatedFor,
+    AxumJson(req): AxumJson<DnsRecord>,
+) -> Result<StatusCode, AppError> {
+    // Only allow adding records for the authenticated user
+    let user_pat = format!(".{}.is.fckn.gay", authenticed_for.user_id());
+    if !req.name.ends_with(&user_pat) && req.name != user_pat[1..] {
+        return Err(anyhow::anyhow!("Record name must match your user domain").into());
+    }
+    let _key = dns.lock().await.add_record(req).await?;
+    Ok(StatusCode::CREATED)
+}
 use std::sync::Arc;
 
 use crate::{
-    auth_cache::{AuthenticatedFor, add_authorization_or_redirect},
+    auth_cache::{AuthenticatedFor, add_authorization_or_unauthorized},
     error::AppError,
 };
 use axum::{
@@ -32,17 +49,12 @@ async fn dns_records(
 }
 
 pub fn router(appstate: crate::Interfaces) -> Router<crate::Interfaces> {
-    let serve_dir = tower_http::services::ServeDir::new("server/static/user");
     Router::new()
         .route("/records", axum::routing::get(dns_records))
-        // serve static files from the user directory
-        .fallback_service(serve_dir)
-        // all these routes require authentication to view
-        // so we add the middleware here that converts the login-token cookie
-        // to an authenticated user id
+        .route("/add_record", axum::routing::post(add_record_endpoint))
         .layer(from_fn_with_state(
             appstate.auth_cache.clone(),
-            add_authorization_or_redirect,
+            add_authorization_or_unauthorized,
         ))
         .with_state(appstate)
 }

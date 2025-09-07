@@ -6,7 +6,7 @@ use axum::{
     extract::{FromRequestParts, Request, State},
     http::StatusCode,
     middleware::Next,
-    response::{Redirect, Response},
+    response::Response,
 };
 use axum_extra::extract::cookie::CookieJar;
 
@@ -127,15 +127,14 @@ impl<S: Send + Sync + 'static> FromRequestParts<S> for AuthenticatedFor {
     }
 }
 
-pub async fn add_authorization_or_redirect(
+pub async fn add_authorization_or_unauthorized(
     State(state): State<Arc<AuthenticationCache>>,
     mut request: Request,
     next: Next,
-) -> Result<Response, Redirect> {
+) -> Result<Response, StatusCode> {
     if add_authorization(&state, &mut request).await {
         Ok(next.run(request).await)
     } else {
-        let redirect = Redirect::to("/");
-        Err(redirect)
+        Err(StatusCode::UNAUTHORIZED)
     }
 }

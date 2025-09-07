@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" href="../style.css">
+    <meta charset="utf-8" />
+    <script>
+        async function populate() {
+            var table = document.getElementById("dns");
+            // Show spinner and empty row
+            table.innerHTML = `<tr><th>record</th><th>type</th><th>content</th></tr>
+                <tr id="spinner-row">
+                    <td colspan="3" style="text-align:center; height: 3em;">
+                        <div class="spinner"></div>
+                    </td>
+                </tr>`;
+
+
+            var response = await fetch("/api/records");
+            var records = await response.json();
+
+            table.innerHTML = "<tr><th>record</th><th>type</th><th>content</th></tr>";
+            if (records.length === 0) {
+                var emptyRow = table.appendChild(document.createElement("tr"));
+                var emptyCell = emptyRow.appendChild(document.createElement("td"));
+                emptyCell.colSpan = 3;
+                emptyCell.style.textAlign = "center";
+                emptyCell.innerHTML = "No records found.";
+            }
+            for (var i = 0; i < records.length; i++) {
+                var row = table.appendChild(document.createElement("tr"));
+                var cell1 = row.appendChild(document.createElement("td"));
+                var cell2 = row.appendChild(document.createElement("td"));
+                var cell3 = row.appendChild(document.createElement("td"));
+                cell1.innerHTML = records[i].name;
+                cell2.innerHTML = records[i].record_type;
+                cell3.innerHTML = records[i].content;
+            }
+            // Add cute + button row
+            var addRow = table.appendChild(document.createElement("tr"));
+            var addCell = addRow.appendChild(document.createElement("td"));
+            addCell.colSpan = 3;
+            addCell.style.textAlign = "center";
+            addCell.innerHTML = `<button id='add-record-btn' class='cute-plus' title='Add DNS Record' onclick='showAddRecordForm()'>➕</button>`;
+        }
+        function showAddRecordForm() {
+            const container = document.getElementById('add-record-form-container');
+            container.innerHTML = `
+            <form id="add-record-form" class="silly rainbow-border" style="margin:1em 0;">
+                <label>Name: <input type="text" name="name" required></label><br>
+                <label>Type: <select name="record_type">
+                    <option value="A">A</option>
+                    <option value="AAAA">AAAA</option>
+                    <option value="CNAME">CNAME</option>
+                    <option value="MX">MX</option>
+                    <option value="TXT">TXT</option>
+                    <option value="NS">NS</option>
+                    <option value="ALIAS">ALIAS</option>
+                    <option value="SRV">SRV</option>
+                    <option value="TLSA">TLSA</option>
+                    <option value="CAA">CAA</option>
+                    <option value="HTTPS">HTTPS</option>
+                    <option value="SVCB">SVCB</option>
+                </select></label><br>
+                <label>Content: <input type="text" name="content" required></label><br>
+                <label>TTL (seconds): <input type="number" name="ttl_seconds" value="300"></label><br>
+                <label>Priority: <input type="number" name="priority"></label><br>
+                <input type="submit" value="Add Record">
+                <button type="button" onclick="hideAddRecordForm()">Cancel</button>
+            </form>
+        `;
+            container.style.display = '';
+            document.getElementById('add-record-form').onsubmit = async function (e) {
+                e.preventDefault();
+                const form = e.target;
+                const data = Object.fromEntries(new FormData(form));
+                // Convert record_type to enum
+                data.record_type = data.record_type;
+                if (data.ttl_seconds) data.ttl_seconds = parseInt(data.ttl_seconds);
+                if (data.priority) data.priority = parseInt(data.priority);
+                const res = await fetch('/api/add_record', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (res.ok) {
+                    hideAddRecordForm();
+                    populate();
+                } else {
+                    alert('Failed to add record: ' + await res.text());
+                }
+            };
+        }
+
+        function hideAddRecordForm() {
+            const container = document.getElementById('add-record-form-container');
+            container.style.display = 'none';
+            container.innerHTML = '';
+        }
+    </script>
+
+</head>
+
+<body onload="populate()">
+    <p id="message"></p>
+    <div id="add-record-form-container" style="display:none;"></div>
+    <table id="dns">
+        <!-- Table will be populated by JS -->
+    </table>
+
+</body>
+
+<style>
+    .cute-plus {
+        font-size: 1.3em;
+        background: linear-gradient(90deg, #ffe7c7 0%, #e0ffe7 100%);
+        color: #ff90b3;
+        border: 2px solid #c7eaff;
+        border-radius: 50%;
+        width: 2em;
+        height: 2em;
+        box-shadow: 0 2px 8px #e0d6ff44;
+        cursor: pointer;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s, transform 0.2s;
+        vertical-align: middle;
+    }
+
+    .cute-plus:hover {
+        background: linear-gradient(90deg, #e0ffe7 0%, #ffe7c7 100%);
+        transform: scale(1.15);
+    }
+
+    .spinner {
+        border: 6px solid #e0f7f7;
+        border-top: 6px solid #d48fa6;
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+</style>
+</br>
+
+</body>
+
+</html>
