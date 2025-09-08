@@ -24,7 +24,8 @@ async fn main() -> Result<()> {
     //
     // we should also run a ctrl-c handler to gracefully shutdown the server
     // and flsuh the interfaces
-    let user_routes = user_routes::router(interfaces.clone());
+    let user_routes = user_routes::router(interfaces.clone(), "server/static/u");
+    let api_router = user_routes::api_router(interfaces.clone());
     let app = axum::Router::new()
         // .route("/", axum::routing::get(hello_world))
         .route("/login", post(login::login))
@@ -35,7 +36,8 @@ async fn main() -> Result<()> {
             tower_http::services::ServeDir::new("server/static")
                 .append_index_html_on_directories(true),
         )
-        .nest("/api", user_routes)
+        .nest("/user", user_routes)
+        .nest("/api", api_router)
         .with_state(interfaces);
 
     axum::serve(listener, app)

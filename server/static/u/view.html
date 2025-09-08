@@ -17,7 +17,16 @@
 
 
             var response = await fetch("/api/records");
-            var records = await response.json();
+            if (response.ok) {
+                var records = await response.json();
+            } else {
+                console.log("Failed to fetch records:", response.status, response.statusText);
+                if (response.status === 401) {
+                    window.location.href = "/";
+                }
+                return;
+            }
+
 
             table.innerHTML = "<tr><th>record</th><th>type</th><th>content</th></tr>";
             if (records.length === 0) {

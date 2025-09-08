@@ -18,7 +18,7 @@ async fn add_record_endpoint(
 use std::sync::Arc;
 
 use crate::{
-    auth_cache::{AuthenticatedFor, add_authorization_or_unauthorized},
+    auth_cache::{AuthenticatedFor, add_authorization_or_unauthorized, redirect_if_unauthorized},
     error::AppError,
 };
 use axum::{
@@ -48,13 +48,24 @@ async fn dns_records(
     Ok(Json(filtered_records))
 }
 
-pub fn router(appstate: crate::Interfaces) -> Router<crate::Interfaces> {
+pub fn api_router(appstate: crate::Interfaces) -> Router<crate::Interfaces> {
     Router::new()
         .route("/records", axum::routing::get(dns_records))
         .route("/add_record", axum::routing::post(add_record_endpoint))
         .layer(from_fn_with_state(
             appstate.auth_cache.clone(),
             add_authorization_or_unauthorized,
+        ))
+        .with_state(appstate)
+}
+
+pub fn router(appstate: crate::Interfaces, user_folder: &str) -> Router<crate::Interfaces> {
+    let serve_dir = tower_http::services::ServeDir::new(user_folder);
+    Router::new()
+        .fallback_service(serve_dir)
+        .layer(from_fn_with_state(
+            appstate.auth_cache.clone(),
+            redirect_if_unauthorized,
         ))
         .with_state(appstate)
 }
