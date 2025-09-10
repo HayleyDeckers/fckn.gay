@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 serde.workspace = true
 uuid.workspace = true
+password-auth.workspace = true

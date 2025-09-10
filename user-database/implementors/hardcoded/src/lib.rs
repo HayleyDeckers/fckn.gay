@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use fckn_gay_user_database_interface::{UserDatabase, UserEntry, UserState, Uuid};
+use fckn_gay_user_database_interface::{PasswordHash, UserDatabase, UserEntry, UserState, Uuid};
 
 /// a simple user database parsed directly from the configuration file.
 ///
@@ -38,14 +38,17 @@ impl UserDatabase for Database {
         let users = config
             .0
             .into_iter()
-            .map(|(username, password)| UserEntry {
-                id: Uuid::new_v4(),
-                username: username.clone(),
-                password,
-                email: format!("\"{username}\"@example.com"),
-                state: UserState::Active,
-                created_at: std::time::SystemTime::now(),
-                last_login: None,
+            .map(|(username, password)| {
+                let password_hash = PasswordHash::new(&password);
+                UserEntry {
+                    id: Uuid::new_v4(),
+                    username: username.clone(),
+                    password_hash,
+                    email: format!("\"{username}\"@example.com"),
+                    state: UserState::Active,
+                    created_at: std::time::SystemTime::now(),
+                    last_login: None,
+                }
             })
             .collect();
         Ok(Database {
@@ -55,6 +58,7 @@ impl UserDatabase for Database {
 
     /// Checks if a user exists in the database with the given username and password.
     async fn is_valid(&self, username: &str, password: &str) -> bool {
+        //relies on user.is_valid short-circuiting the check on username and active state before hashing for performance reasons
         self.users
             .lock()
             .await
@@ -85,10 +89,11 @@ impl UserDatabase for Database {
             return Err(Error::UserExists);
         }
         let user_id = Uuid::new_v4();
+        let password_hash = PasswordHash::new(password);
         lock.push(UserEntry {
             id: user_id,
             username: username.to_string(),
-            password: password.to_string(),
+            password_hash,
             email: email.to_string(),
             state: UserState::Pending,
             created_at: std::time::SystemTime::now(),

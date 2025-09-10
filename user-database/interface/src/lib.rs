@@ -1,5 +1,17 @@
 pub use uuid::Uuid;
 
+pub struct PasswordHash(String);
+impl PasswordHash {
+    pub fn new(password: &str) -> Self {
+        Self(password_auth::generate_hash(password.as_bytes()))
+    }
+
+    pub fn validate(&self, password: &str) -> bool {
+        //todo: this can error if the hash is malformed. Shouldn't happen but we might want to log it.
+        password_auth::verify_password(password.as_bytes(), self.0.as_str()).is_ok()
+    }
+}
+
 #[derive(PartialEq, Eq)]
 pub enum UserState {
     Pending,
@@ -12,8 +24,7 @@ pub enum UserState {
 pub struct UserEntry {
     pub id: Uuid,
     pub username: String,
-    // hashed password
-    pub password: String,
+    pub password_hash: PasswordHash,
     pub email: String,
     pub state: UserState,
     pub created_at: std::time::SystemTime,
@@ -25,9 +36,13 @@ impl UserEntry {
         matches!(self.state, UserState::Active)
     }
 
-    // todo(hayley): this is not very secure, not constant time or hashed
+    // while the validation of the password hash should be constant-time, the other checks and fetching are not
+    // so there might be some ways to time attacks here, but it should be limited to enumeration of users
+    // and given the public nature of the service (dns entries) that is acceptable.
+    // (and also we should have guardrails agains enumeration attacks elsewhere)
     pub fn is_valid(&self, username: &str, password: &str) -> bool {
-        self.is_active() && self.password == password && self.username == username
+        // order is important here for short-circuiting to avoid unnecessary hashing
+        self.is_active() && self.username == username && self.password_hash.validate(password)
     }
 }
 
