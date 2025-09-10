@@ -1,6 +1,8 @@
+use std::fmt::{Debug, Display};
+
 use fckn_gay_dns_interface::{Dns, Record};
 use porkbun_api::{
-    Client, Error,
+    Client, Error as ApiError,
     transport::{DefaultTransport, DefaultTransportError},
 };
 use serde::Deserialize;
@@ -45,9 +47,47 @@ impl PorkbunDns {
     }
 }
 
+pub enum Error {
+    Api(ApiError<DefaultTransportError>),
+    Other(String),
+}
+
+impl Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Api(e) => write!(f, "Porkbun API returned an error: {:?}", e),
+            Error::Other(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Api(_) => write!(f, "Porkbun API returned an error"),
+            Error::Other(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::Api(e) => Some(e),
+            Error::Other(_) => None,
+        }
+    }
+}
+
+impl From<ApiError<DefaultTransportError>> for Error {
+    fn from(e: ApiError<DefaultTransportError>) -> Self {
+        Error::Api(e)
+    }
+}
+
 impl Dns for PorkbunDns {
     type Config = Config;
-    type Error = Error<DefaultTransportError>;
+    type Error = Error;
     type Key = String;
 
     /// Creates a new instance of the DNS provider with the given configuration.
@@ -64,14 +104,20 @@ impl Dns for PorkbunDns {
     /// Adds a DNS record to the provider.
     async fn add_record(&self, record: Record) -> Result<Self::Key, Self::Error> {
         let Some(subdomain) = record.name.strip_suffix(self.domain.as_str()) else {
-            //todo(hayley): this should be a custom error type
-            panic!(
+            return Err(Error::Other(format!(
                 "The subdomain {} does not end with the domain {}",
                 record.name, self.domain
-            );
+            )));
         };
+        let subdomain = subdomain.strip_suffix('.').unwrap_or(subdomain);
+        if !subdomain.is_ascii() {
+            return Err(Error::Other(format!(
+                "The domain {} contains non-ascii characters",
+                record.name
+            )));
+        }
         let cmd = porkbun_api::CreateOrEditDnsRecord {
-            subdomain: Some(subdomain.strip_prefix('.').unwrap_or(subdomain)),
+            subdomain: Some(subdomain),
             record_type: Self::convert_record_type_to_porkbun(record.record_type),
             content: record.content.into(),
             ttl: Some(record.ttl_seconds.into()),
@@ -83,7 +129,10 @@ impl Dns for PorkbunDns {
 
     /// Deletes a DNS record from the provider.
     async fn delete_record(&self, key: Self::Key) -> Result<(), Self::Error> {
-        self.client.delete(&self.domain, &key).await
+        self.client
+            .delete(&self.domain, &key)
+            .await
+            .map_err(Error::from)
     }
 
     /// Lists all DNS records for a domain.
