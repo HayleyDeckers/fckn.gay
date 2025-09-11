@@ -46,7 +46,7 @@ impl UserDatabase for Database {
                     password_hash,
                     email: format!("\"{username}\"@example.com"),
                     state: UserState::Active,
-                    created_at: std::time::SystemTime::now(),
+                    created_at: chrono::Utc::now().naive_utc(),
                     last_login: None,
                 }
             })
@@ -96,7 +96,7 @@ impl UserDatabase for Database {
             password_hash,
             email: email.to_string(),
             state: UserState::Pending,
-            created_at: std::time::SystemTime::now(),
+            created_at: chrono::Utc::now().naive_utc(),
             last_login: None,
         });
 

@@ -1,11 +1,13 @@
 [package]
-name = "fckn-gay-user-database-hardcoded"
+name = "fckn-gay-user-database-diesel"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 fckn-gay-user-database-interface = { path = "../../interface" }
 serde.workspace = true
-uuid.workspace = true
+diesel.workspace = true
 tokio = { workspace = true, features = ["sync"] }
+thiserror.workspace = true
 chrono.workspace = true
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }

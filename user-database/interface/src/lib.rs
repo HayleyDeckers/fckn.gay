@@ -1,18 +1,28 @@
 pub use uuid::Uuid;
 
+#[derive(Debug)]
 pub struct PasswordHash(String);
 impl PasswordHash {
     pub fn new(password: &str) -> Self {
         Self(password_auth::generate_hash(password.as_bytes()))
     }
 
+    pub fn into_string(self) -> String {
+        self.0
+    }
+
     pub fn validate(&self, password: &str) -> bool {
         //todo: this can error if the hash is malformed. Shouldn't happen but we might want to log it.
         password_auth::verify_password(password.as_bytes(), self.0.as_str()).is_ok()
     }
+
+    //todo: validate that the raw hash is valid
+    pub fn from_raw(raw: String) -> Self {
+        Self(raw)
+    }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum UserState {
     Pending,
     Active,
@@ -21,14 +31,15 @@ pub enum UserState {
 }
 
 // uuid field is also the key for activating an account
+#[derive(Debug)]
 pub struct UserEntry {
     pub id: Uuid,
     pub username: String,
     pub password_hash: PasswordHash,
     pub email: String,
     pub state: UserState,
-    pub created_at: std::time::SystemTime,
-    pub last_login: Option<std::time::SystemTime>,
+    pub created_at: chrono::NaiveDateTime,
+    pub last_login: Option<chrono::NaiveDateTime>,
 }
 
 impl UserEntry {

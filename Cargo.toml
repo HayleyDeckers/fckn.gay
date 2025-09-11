@@ -24,3 +24,11 @@ tower-http = { version = "0.6", default-features = false }
 getrandom = "0.3.2"
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
 password-auth = "1.0"
+diesel = { version = "2.2", features = [
+    "sqlite",
+    "returning_clauses_for_sqlite_3_35",
+    "chrono",
+    "uuid",
+] }
+thiserror = "1.0"
+chrono = { version = "0.4", features = ["serde"] }

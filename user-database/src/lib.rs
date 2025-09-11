@@ -1,4 +1,5 @@
 pub use fckn_gay_user_database_csv::Database as CsvDatabase;
+pub use fckn_gay_user_database_diesel::Database as DieselDatabase;
 pub use fckn_gay_user_database_hardcoded::Database as HardcodedDatabase;
 pub use fckn_gay_user_database_interface::{UserDatabase as Interface, Uuid};
 use serde::Deserialize;
@@ -6,6 +7,7 @@ use serde::Deserialize;
 pub enum Database {
     Hardcoded(HardcodedDatabase),
     Csv(CsvDatabase),
+    Diesel(DieselDatabase),
 }
 
 impl<'de> Deserialize<'de> for Database {
@@ -23,12 +25,14 @@ impl<'de> Deserialize<'de> for Database {
 pub enum Providers {
     Hardcoded,
     Csv,
+    Diesel,
 }
 
 #[derive(Debug)]
 pub enum Error {
     Hardcoded(<HardcodedDatabase as Interface>::Error),
     Csv(<CsvDatabase as Interface>::Error),
+    Diesel(<DieselDatabase as Interface>::Error),
     MissingConfig(&'static str),
     CantChoseProvider,
 }
@@ -38,6 +42,7 @@ impl std::error::Error for Error {
         match self {
             Error::Hardcoded(err) => err.source(),
             Error::Csv(err) => err.source(),
+            Error::Diesel(err) => err.source(),
             Error::MissingConfig(_) => None,
             Error::CantChoseProvider => None,
         }
@@ -49,6 +54,7 @@ impl std::fmt::Display for Error {
         match self {
             Error::Hardcoded(err) => write!(f, "{}", err),
             Error::Csv(err) => write!(f, "{}", err),
+            Error::Diesel(err) => write!(f, "{}", err),
             Error::MissingConfig(msg) => {
                 write!(f, "Missing configuration for selected provider: {}", msg)
             }
@@ -62,11 +68,12 @@ impl std::fmt::Display for Error {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 pub struct Config {
     pub provider: Option<Providers>,
     pub hardcoded: Option<<HardcodedDatabase as Interface>::Config>,
     pub csv: Option<<CsvDatabase as Interface>::Config>,
+    pub diesel: Option<<DieselDatabase as Interface>::Config>,
 }
 
 impl Interface for Database {
@@ -77,6 +84,7 @@ impl Interface for Database {
             provider,
             hardcoded,
             csv,
+            diesel,
         } = config;
         if let Some(provider) = provider {
             match provider {
@@ -88,14 +96,24 @@ impl Interface for Database {
                 Providers::Csv => CsvDatabase::new(csv.ok_or(Error::MissingConfig("Csv"))?)
                     .map_err(Error::Csv)
                     .map(Database::Csv),
+                Providers::Diesel => {
+                    DieselDatabase::new(diesel.ok_or(Error::MissingConfig("Diesel"))?)
+                        .map_err(Error::Diesel)
+                        .map(Database::Diesel)
+                }
             }
         } else {
-            match (hardcoded, csv) {
-                (Some(hardcoded), None) => HardcodedDatabase::new(hardcoded)
+            match (hardcoded, csv, diesel) {
+                (Some(hardcoded), None, None) => HardcodedDatabase::new(hardcoded)
                     .map_err(Error::Hardcoded)
                     .map(Database::Hardcoded),
-                (None, Some(csv)) => CsvDatabase::new(csv).map_err(Error::Csv).map(Database::Csv),
-                (None, None) => Err(Error::MissingConfig("No provider specified")),
+                (None, Some(csv), None) => {
+                    CsvDatabase::new(csv).map_err(Error::Csv).map(Database::Csv)
+                }
+                (None, None, Some(diesel)) => DieselDatabase::new(diesel)
+                    .map_err(Error::Diesel)
+                    .map(Database::Diesel),
+                (None, None, None) => Err(Error::MissingConfig("No provider specified")),
                 _ => Err(Error::CantChoseProvider),
             }
         }
@@ -104,6 +122,7 @@ impl Interface for Database {
         match self {
             Database::Hardcoded(db) => db.is_valid(username, password).await,
             Database::Csv(db) => db.is_valid(username, password).await,
+            Database::Diesel(db) => db.is_valid(username, password).await,
         }
     }
 
@@ -111,6 +130,7 @@ impl Interface for Database {
         match self {
             Database::Hardcoded(db) => db.is_available(username).await,
             Database::Csv(db) => db.is_available(username).await,
+            Database::Diesel(db) => db.is_available(username).await,
         }
     }
 
@@ -129,6 +149,10 @@ impl Interface for Database {
                 .add_user(username, password, email)
                 .await
                 .map_err(Self::Error::Csv),
+            Database::Diesel(db) => db
+                .add_user(username, password, email)
+                .await
+                .map_err(Self::Error::Diesel),
         }
     }
 
@@ -136,6 +160,7 @@ impl Interface for Database {
         match self {
             Database::Hardcoded(db) => db.activate_user(uuid).await.map_err(Self::Error::Hardcoded),
             Database::Csv(db) => db.activate_user(uuid).await.map_err(Self::Error::Csv),
+            Database::Diesel(db) => db.activate_user(uuid).await.map_err(Self::Error::Diesel),
         }
     }
 }

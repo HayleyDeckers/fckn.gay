@@ -6,3 +6,4 @@ config.toml
 #  local notes
 notes.md
 TODO.md
+*.db
