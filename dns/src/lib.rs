@@ -1,6 +1,7 @@
 use core::panic;
 
 pub use fckn_gay_dns_dummy::DummyDns as Dummy;
+pub use fckn_gay_dns_hickory::HickoryDns as Hickory;
 pub use fckn_gay_dns_interface::{Dns as Interface, Record, RecordType};
 pub use fckn_gay_dns_porkbun::PorkbunDns as Porkbun;
 pub use serde::{Deserialize, Serialize};
@@ -10,6 +11,7 @@ pub use serde::{Deserialize, Serialize};
 pub enum Providers {
     Porkbun,
     Dummy,
+    Hickory,
 }
 
 #[derive(Debug, Deserialize)]
@@ -17,17 +19,20 @@ pub struct Config {
     provider: Option<Providers>,
     porkbun: Option<<Porkbun as Interface>::Config>,
     dummy: Option<<Dummy as Interface>::Config>,
+    hickory: Option<<Hickory as Interface>::Config>,
 }
 
 pub enum Dns {
     Porkbun(Porkbun),
     Dummy(Dummy),
+    Hickory(Hickory),
 }
 
 #[derive(Debug)]
 pub enum Error {
     Porkbun(<Porkbun as Interface>::Error),
     Dummy(<Dummy as Interface>::Error),
+    Hickory(<Hickory as Interface>::Error),
     MissingConfig(&'static str),
     CantChoseProvider,
     NoConfig,
@@ -38,6 +43,7 @@ impl std::fmt::Display for Error {
         match self {
             Error::Porkbun(err) => write!(f, "{}", err),
             Error::Dummy(err) => write!(f, "{}", err),
+            Error::Hickory(err) => write!(f, "{}", err),
             Error::MissingConfig(msg) => {
                 write!(f, "Missing configuration for selected provider: {}", msg)
             }
@@ -57,6 +63,7 @@ impl std::error::Error for Error {
         match self {
             Error::Porkbun(err) => err.source(),
             Error::Dummy(err) => err.source(),
+            Error::Hickory(err) => err.source(),
             Error::MissingConfig(_) => None,
             Error::CantChoseProvider => None,
             Error::NoConfig => None,
@@ -67,6 +74,7 @@ impl std::error::Error for Error {
 pub enum Key {
     Porkbun(<Porkbun as Interface>::Key),
     Dummy(<Dummy as Interface>::Key),
+    Hickory(<Hickory as Interface>::Key),
 }
 
 impl Interface for Dns {
@@ -85,6 +93,11 @@ impl Interface for Dns {
                 Providers::Dummy => Dummy::new(config.dummy.ok_or(Error::MissingConfig("Dummy"))?)
                     .map(Dns::Dummy)
                     .map_err(Error::Dummy),
+                Providers::Hickory => {
+                    Hickory::new(config.hickory.ok_or(Error::MissingConfig("Hickory"))?)
+                        .map(Dns::Hickory)
+                        .map_err(Error::Hickory)
+                }
             }
         } else {
             match (config.porkbun, config.dummy) {
@@ -113,6 +126,11 @@ impl Interface for Dns {
                 .await
                 .map(Key::Dummy)
                 .map_err(Error::Dummy),
+            Dns::Hickory(hickory) => hickory
+                .add_record(record)
+                .await
+                .map(Key::Hickory)
+                .map_err(Error::Hickory),
         }
     }
 
@@ -122,6 +140,13 @@ impl Interface for Dns {
                 .delete_record(porkbun_key)
                 .await
                 .map_err(Error::Porkbun),
+            (Dns::Hickory(hickory), Key::Hickory(hickory_key)) => hickory
+                .delete_record(hickory_key)
+                .await
+                .map_err(Error::Hickory),
+            (Dns::Dummy(dummy), Key::Dummy(dummy_key)) => {
+                dummy.delete_record(dummy_key).await.map_err(Error::Dummy)
+            }
             #[allow(unreachable_patterns)]
             _ => panic!("Invalid key type for DNS provider"),
         }
@@ -151,6 +176,16 @@ impl Interface for Dns {
                         .collect()
                 })
                 .map_err(Error::Dummy),
+            Dns::Hickory(hickory) => hickory
+                .list_records()
+                .await
+                .map(|records| {
+                    records
+                        .into_iter()
+                        .map(|(key, record)| (Key::Hickory(key), record))
+                        .collect()
+                })
+                .map_err(Error::Hickory),
         }
     }
 }

@@ -1,0 +1,11 @@
+[package]
+name = "fckn-gay-dns-hickory"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fckn-gay-dns-interface = { path = "../../interface" }
+hickory-server = { workspace = true }
+serde.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+async-trait = { workspace = true }

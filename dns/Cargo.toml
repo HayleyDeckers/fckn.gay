@@ -7,5 +7,5 @@ edition = "2024"
 fckn-gay-dns-interface = { path = "./interface" }
 fckn-gay-dns-porkbun = { path = "./implementors/porkbun" }
 fckn-gay-dns-dummy = { path = "./implementors/dummy" }
-
+fckn-gay-dns-hickory = { path = "./implementors/hickory" }
 serde.workspace = true

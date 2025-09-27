@@ -27,16 +27,19 @@ async fn main() -> Result<()> {
     let user_routes = user_routes::router(interfaces.clone(), "server/static/u");
     let api_router = user_routes::api_router(interfaces.clone());
     let app = axum::Router::new()
-        // .route("/", axum::routing::get(hello_world))
+        // frontend api routes
         .route("/login", post(login::login))
         .route("/logout", get(login::logout))
         .route("/sign-up", post(login::sign_up))
         .route("/confirm-sign-up/{uuid}", get(login::confirm_sign_up))
+        // static files, /, favicon, css etc
         .fallback_service(
             tower_http::services::ServeDir::new("server/static")
                 .append_index_html_on_directories(true),
         )
+        // html pages that require authentication
         .nest("/user", user_routes)
+        // api routes, most will need a valid session or api key
         .nest("/api", api_router)
         .with_state(interfaces);
 
