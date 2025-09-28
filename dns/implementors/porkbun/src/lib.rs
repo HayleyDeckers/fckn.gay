@@ -55,8 +55,8 @@ pub enum Error {
 impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Api(e) => write!(f, "Porkbun API returned an error: {:?}", e),
-            Error::Other(s) => write!(f, "{}", s),
+            Error::Api(e) => write!(f, "Porkbun API returned an error: {e:?}"),
+            Error::Other(s) => write!(f, "{s}"),
         }
     }
 }
@@ -65,7 +65,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Api(_) => write!(f, "Porkbun API returned an error"),
-            Error::Other(s) => write!(f, "{}", s),
+            Error::Other(s) => write!(f, "{s}"),
         }
     }
 }

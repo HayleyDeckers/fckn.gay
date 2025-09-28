@@ -3,6 +3,9 @@ name = "fckn-gay-dns-dummy"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 fckn-gay-dns-interface = { path = "../../interface" }
 serde.workspace = true

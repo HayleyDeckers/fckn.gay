@@ -3,6 +3,9 @@ name = "fckn-gay-email"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 fckn-gay-email-interface = { path = "./interface" }
 fckn-gay-email-lettre = { path = "./implementors/lettre" }

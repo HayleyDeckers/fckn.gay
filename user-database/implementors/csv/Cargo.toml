@@ -3,6 +3,9 @@ name = "fckn-gay-user-database-csv"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 fckn-gay-user-database-interface = { path = "../../interface" }
 serde.workspace = true

@@ -58,7 +58,7 @@ impl UserDatabase for Database {
             Ok(0) => true,
             Ok(_) => false,
             Err(e) => {
-                eprintln!("Error checking username availability: {}", e);
+                eprintln!("Error checking username availability: {e}");
                 true
             }
         }

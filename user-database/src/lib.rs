@@ -52,11 +52,11 @@ impl std::error::Error for Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Hardcoded(err) => write!(f, "{}", err),
-            Error::Csv(err) => write!(f, "{}", err),
-            Error::Diesel(err) => write!(f, "{}", err),
+            Error::Hardcoded(err) => write!(f, "{err}"),
+            Error::Csv(err) => write!(f, "{err}"),
+            Error::Diesel(err) => write!(f, "{err}"),
             Error::MissingConfig(msg) => {
-                write!(f, "Missing configuration for selected provider: {}", msg)
+                write!(f, "Missing configuration for selected provider: {msg}")
             }
             Error::CantChoseProvider => {
                 write!(

@@ -20,11 +20,11 @@ pub struct User {
 }
 
 impl UserDatabase for Database {
-    /// Configuration type for the UserDatabase.
+    /// Configuration type for the `UserDatabase`.
     type Config = Config;
     type Error = csv::Error;
 
-    /// Creates a new instance of the UserDatabase with the given configuration.
+    /// Creates a new instance of the `UserDatabase` with the given configuration.
     fn new(config: Self::Config) -> Result<Self, Self::Error> {
         let mut rdr = csv::Reader::from_path(config.file).expect("Failed to open CSV file");
         let users = rdr

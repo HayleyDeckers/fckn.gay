@@ -126,7 +126,7 @@ fn record_from_hickory_record(r: &HickoryRecord) -> Record {
             RData::TXT(txt) => txt
                 .txt_data()
                 .iter()
-                .map(|s| String::from_utf8_lossy(&s).to_string())
+                .map(|s| String::from_utf8_lossy(s))
                 .collect::<String>(),
             _ => panic!("unsupported record type"),
         },
@@ -163,7 +163,7 @@ impl Dns for HickoryDns {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
         for line in contents.lines() {
-            println!("line: {}", line);
+            println!("line: {line}");
             authority.upsert_mut(
                 hickory_record_from_record(Record::from_str(line).unwrap()),
                 0,
@@ -176,7 +176,7 @@ impl Dns for HickoryDns {
         catalog.upsert(zone_name.into(), vec![authority.clone()]);
         let mut server = ServerFuture::new(Wrapper(catalog));
         if let Some(tcp_addr) = config.tcp_addr {
-            println!("binding to tcp: {}", tcp_addr);
+            println!("binding to tcp: {tcp_addr}");
             server
                 .register_listener_std(
                     std::net::TcpListener::bind(tcp_addr).unwrap(),
@@ -185,7 +185,7 @@ impl Dns for HickoryDns {
                 .unwrap();
         }
         if let Some(udp_addr) = config.udp_addr {
-            println!("binding to udp: {}", udp_addr);
+            println!("binding to udp: {udp_addr}");
             server
                 .register_socket_std(std::net::UdpSocket::bind(udp_addr).unwrap())
                 .unwrap();
@@ -212,7 +212,7 @@ impl Dns for HickoryDns {
             name.clone().into(),
             record_type_to_hickory(record.record_type),
         );
-        println!("adding record: {:?}", key);
+        println!("adding record: {key:?}");
         let hickory_record = hickory_record_from_record(record);
         let mut file = self.server_file.lock().await;
         if !self.authority.upsert(hickory_record, 0).await {
@@ -228,7 +228,7 @@ impl Dns for HickoryDns {
             .map(record_from_hickory_record)
             .map(|r| format!("{r}\n"))
             .collect::<String>();
-        println!("new content:\n{}", new_content);
+        println!("new content:\n{new_content}");
         file.write_all(new_content.as_bytes()).await.unwrap();
         file.flush().await.unwrap();
         Ok(key)

@@ -3,6 +3,9 @@ name = "fckn-gay-user-database-interface"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 serde.workspace = true
 uuid.workspace = true

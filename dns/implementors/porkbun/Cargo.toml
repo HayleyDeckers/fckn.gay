@@ -3,6 +3,9 @@ name = "fckn-gay-dns-porkbun"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 fckn-gay-dns-interface = { path = "../../interface" }
 porkbun-api = { workspace = true, features = ["default-client"] }

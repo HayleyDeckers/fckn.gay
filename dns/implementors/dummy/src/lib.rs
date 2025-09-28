@@ -54,7 +54,9 @@ impl Dns for DummyDns {
     async fn delete_record(&self, key: Self::Key) -> Result<(), Self::Error> {
         let mut entries = self.entries.lock().await;
         //todo: error if key is out of bounds
-        entries.get_mut(key).map(|r| *r = None);
+        if let Some(r) = entries.get_mut(key) {
+            *r = None;
+        }
         Ok(())
     }
 

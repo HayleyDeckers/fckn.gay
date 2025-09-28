@@ -81,7 +81,7 @@ impl FromStr for RecordType {
             "HTTPS" => Ok(RecordType::HTTPS),
             "SVCB" => Ok(RecordType::SVCB),
             "TLSA" => Ok(RecordType::TLSA),
-            _ => Err(format!("Unknown record type: {}", s)),
+            _ => Err(format!("Unknown record type: {s}")),
         }
     }
 }
@@ -94,7 +94,7 @@ impl Display for Record {
             self.name, self.record_type, self.ttl_seconds, self.content
         )?;
         if let Some(priority) = self.priority {
-            write!(f, " {}", priority)
+            write!(f, " {priority}")
         } else {
             Ok(())
         }
@@ -106,44 +106,44 @@ impl FromStr for Record {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let Some((name, rest)) = s.split_once(' ') else {
-            return Err(format!("invalid record string: {}", s));
+            return Err(format!("invalid record string: {s}"));
         };
         let name = name.to_string();
 
         let Some((record, rest)) = rest.split_once(' ') else {
-            return Err(format!("invalid record string: {}", s));
+            return Err(format!("invalid record string: {s}"));
         };
         let record_type = record.parse()?;
         let Some((ttl, rest)) = rest.split_once(' ') else {
-            return Err(format!("invalid record string: {}", s));
+            return Err(format!("invalid record string: {s}"));
         };
         let ttl_seconds = ttl
             .parse()
-            .map_err(|e: std::num::ParseIntError| format!("Invalid TTL seconds: {}", e))?;
-        if record_type != RecordType::MX {
-            let content = rest.to_string();
-            return Ok(Record {
-                name,
-                record_type,
-                content,
-                ttl_seconds,
-                priority: None,
-            });
-        } else {
+            .map_err(|e: std::num::ParseIntError| format!("Invalid TTL seconds: {e}"))?;
+        if record_type == RecordType::MX {
             let Some((content, priority)) = rest.rsplit_once(' ') else {
-                return Err(format!("Invalid MX record, missing priority: {}", s));
+                return Err(format!("Invalid MX record, missing priority: {s}"));
             };
             let priority = priority
                 .parse()
-                .map_err(|e| format!("Invalid priority: {}", e))?;
+                .map_err(|e| format!("Invalid priority: {e}"))?;
             let content = content.to_string();
-            return Ok(Record {
+            Ok(Record {
                 name,
                 record_type,
                 content,
                 ttl_seconds,
                 priority: Some(priority),
-            });
+            })
+        } else {
+            let content = rest.to_string();
+            Ok(Record {
+                name,
+                record_type,
+                content,
+                ttl_seconds,
+                priority: None,
+            })
         }
     }
 }

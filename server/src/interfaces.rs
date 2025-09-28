@@ -14,7 +14,7 @@ impl PublicSuffix {
         let suffix = if suffix.starts_with('.') {
             suffix
         } else {
-            format!(".{}", suffix)
+            format!(".{suffix}")
         };
         Self(Arc::new(suffix))
     }

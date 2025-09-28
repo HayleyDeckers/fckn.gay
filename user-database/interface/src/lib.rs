@@ -66,11 +66,11 @@ pub enum Error<E> {
 }
 
 pub trait UserDatabase {
-    /// Configuration type for the UserDatabase.
+    /// Configuration type for the `UserDatabase`.
     type Config: serde::de::DeserializeOwned;
-    /// Error type for the UserDatabase.
+    /// Error type for the `UserDatabase`.
     type Error: std::error::Error + Send + Sync + 'static;
-    /// Creates a new instance of the UserDatabase with the given configuration.
+    /// Creates a new instance of the `UserDatabase` with the given configuration.
     fn new(config: Self::Config) -> Result<Self, Self::Error>
     where
         Self: Sized;

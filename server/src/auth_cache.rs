@@ -58,7 +58,7 @@ impl AuthenticationCache {
         let (Ok(hi), Ok(lo)) = (getrandom::u64(), getrandom::u64()) else {
             return None;
         };
-        let token = format!("{:016x}{:016x}", hi, lo);
+        let token = format!("{hi:016x}{lo:016x}");
         self.add_token(token.clone(), user_id, expires_at).await;
         Some(token)
     }
@@ -87,7 +87,7 @@ impl AuthenticatedFor {
     }
 
     pub fn user_id(&self) -> &str {
-        &self.0.as_str()
+        self.0.as_str()
     }
 }
 
@@ -96,13 +96,13 @@ impl AuthenticatedFor {
 /// If the user is authorized, it adds the user id to the request's extensions.
 /// if the user is not authorized, it does nothing.
 pub async fn add_authorization(state: &AuthenticationCache, request: &mut Request) -> bool {
-    let jar = CookieJar::from_headers(&request.headers());
+    let jar = CookieJar::from_headers(request.headers());
     if let Some(cookie) = jar.get("login-token") {
         // we don't care about the cookie domain, path, etc.
         // those are for the browser to care about
         let token = cookie.value();
         if let Some(authorized_for) = state.get_user_id_from_token(token).await {
-            println!("User {} authorized with token {}", authorized_for, token);
+            println!("User {authorized_for} authorized with token {token}");
             request
                 .extensions_mut()
                 .insert(AuthenticatedFor::new(authorized_for));

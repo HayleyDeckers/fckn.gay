@@ -33,10 +33,10 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Lettre(err) => write!(f, "{}", err),
-            Error::StdOut(err) => write!(f, "{}", err),
+            Error::Lettre(err) => write!(f, "{err}"),
+            Error::StdOut(err) => write!(f, "{err}"),
             Error::MissingConfig(msg) => {
-                write!(f, "Missing configuration for selected provider: {}", msg)
+                write!(f, "Missing configuration for selected provider: {msg}")
             }
             Error::NoConfig => write!(f, "No email provider configured"),
             Error::CantChoseProvider => {

@@ -3,6 +3,9 @@ name = "fckn-gay-user-database"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 fckn-gay-user-database-interface = { path = "./interface" }
 fckn-gay-user-database-hardcoded = { path = "./implementors/hardcoded" }

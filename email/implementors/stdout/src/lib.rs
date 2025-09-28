@@ -22,8 +22,7 @@ impl Interface for Email {
         body: &str,
     ) -> Result<(), Self::Error> {
         println!(
-            "Sending email:\nFrom: <{}>\nTo: <{}>\nSubject: \"{}\"\n----\n{}\n----",
-            from, to, subject, body
+            "Sending email:\nFrom: <{from}>\nTo: <{to}>\nSubject: \"{subject}\"\n----\n{body}\n----"
         );
         Ok(())
     }

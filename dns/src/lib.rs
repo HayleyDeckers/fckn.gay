@@ -41,11 +41,11 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Porkbun(err) => write!(f, "{}", err),
-            Error::Dummy(err) => write!(f, "{}", err),
-            Error::Hickory(err) => write!(f, "{}", err),
+            Error::Porkbun(err) => write!(f, "{err}"),
+            Error::Dummy(err) => write!(f, "{err}"),
+            Error::Hickory(err) => write!(f, "{err}"),
             Error::MissingConfig(msg) => {
-                write!(f, "Missing configuration for selected provider: {}", msg)
+                write!(f, "Missing configuration for selected provider: {msg}")
             }
             Error::CantChoseProvider => {
                 write!(

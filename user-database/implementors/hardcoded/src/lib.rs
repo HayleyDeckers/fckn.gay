@@ -29,11 +29,11 @@ impl std::fmt::Display for Error {
 }
 
 impl UserDatabase for Database {
-    /// Configuration type for the UserDatabase.
+    /// Configuration type for the `UserDatabase`.
     type Config = Config;
     type Error = Error;
 
-    /// Creates a new instance of the UserDatabase with the given configuration.
+    /// Creates a new instance of the `UserDatabase` with the given configuration.
     fn new(config: Self::Config) -> Result<Self, Self::Error> {
         let users = config
             .0
@@ -105,11 +105,11 @@ impl UserDatabase for Database {
 
     async fn activate_user(&self, uuid: Uuid) -> Result<(), Self::Error> {
         let mut lock = self.users.lock().await;
-        if let Some(user) = lock.iter_mut().find(|user| user.id == uuid) {
-            if user.state == UserState::Pending {
-                user.state = UserState::Active;
-                return Ok(());
-            }
+        if let Some(user) = lock.iter_mut().find(|user| user.id == uuid)
+            && user.state == UserState::Pending
+        {
+            user.state = UserState::Active;
+            return Ok(());
         }
         Err(Error::UserNotFound)
     }

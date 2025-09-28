@@ -3,6 +3,9 @@ name = "fckn-gay-email-lettre"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [dependencies]
 fckn-gay-email-interface = { path = "../../interface" }
 serde.workspace = true
