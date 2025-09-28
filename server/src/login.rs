@@ -146,7 +146,7 @@ mod tests {
     use super::is_valid_password;
     #[test]
     fn valid_password() {
-        assert!(!is_valid_password("aB1.aB1."));
+        assert!(is_valid_password("aB1.aB1.aB1."));
     }
 
     #[test]
@@ -160,14 +160,14 @@ mod tests {
         ));
     }
     #[test]
-    fn assert_character_set() {
+    fn password_character_set() {
         // no punc
-        assert!(!is_valid_password("aB1xaB1x"));
+        assert!(!is_valid_password("aB1xaB1xaB1xa"));
         // no lowercase
-        assert!(!is_valid_password("XB1.XB1."));
+        assert!(!is_valid_password("XB1.XB1.XB1."));
         // no uppercase
-        assert!(!is_valid_password("ab1.ab1."));
+        assert!(!is_valid_password("ab1.ab1.ab1."));
         // no numbers
-        assert!(!is_valid_password("aBi.aBi."));
+        assert!(!is_valid_password("aBi.aBi.aBi."));
     }
 }
