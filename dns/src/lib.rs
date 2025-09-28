@@ -100,12 +100,17 @@ impl Interface for Dns {
                 }
             }
         } else {
-            match (config.porkbun, config.dummy) {
-                (Some(porkbun), None) => Porkbun::new(porkbun)
+            match (config.porkbun, config.dummy, config.hickory) {
+                (Some(porkbun), None, None) => Porkbun::new(porkbun)
                     .map(Dns::Porkbun)
                     .map_err(Error::Porkbun),
-                (None, Some(dummy)) => Dummy::new(dummy).map(Dns::Dummy).map_err(Error::Dummy),
-                (None, None) => Err(Error::NoConfig),
+                (None, Some(dummy), None) => {
+                    Dummy::new(dummy).map(Dns::Dummy).map_err(Error::Dummy)
+                }
+                (None, None, Some(hickory)) => Hickory::new(hickory)
+                    .map(Dns::Hickory)
+                    .map_err(Error::Hickory),
+                (None, None, None) => Err(Error::NoConfig),
                 _ => Err(Error::CantChoseProvider),
             }
         }

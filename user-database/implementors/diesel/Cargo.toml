@@ -10,4 +10,4 @@ diesel.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 thiserror.workspace = true
 chrono.workspace = true
-libsqlite3-sys = { version = "0.30", features = ["bundled"] }
+libsqlite3-sys = { version = "0.33", features = ["bundled"] }

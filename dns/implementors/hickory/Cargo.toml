@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 fckn-gay-dns-interface = { path = "../../interface" }
-hickory-server = { workspace = true }
+hickory-server = { workspace = true, features = ["sqlite"] }
 serde.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 async-trait = { workspace = true }
+libsqlite3-sys = { version = "0.33", features = ["bundled"] }
