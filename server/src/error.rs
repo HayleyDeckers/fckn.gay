@@ -3,7 +3,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-pub struct AppError(anyhow::Error);
+pub struct AppError(anyhow::Error, StatusCode);
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
@@ -14,7 +14,7 @@ impl IntoResponse for AppError {
             body.push_str(&error.to_string());
             source = error.source();
         }
-        (StatusCode::INTERNAL_SERVER_ERROR, body).into_response()
+        (self.1, body).into_response()
     }
 }
 
@@ -23,6 +23,12 @@ where
     E: Into<anyhow::Error>,
 {
     fn from(err: E) -> Self {
-        Self(err.into())
+        Self(err.into(), StatusCode::INTERNAL_SERVER_ERROR)
+    }
+}
+
+impl AppError {
+    pub fn new(status_code: StatusCode, err: impl Into<anyhow::Error>) -> Self {
+        Self(err.into(), status_code)
     }
 }

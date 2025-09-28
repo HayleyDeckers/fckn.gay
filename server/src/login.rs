@@ -66,6 +66,21 @@ pub struct Signup {
     email: String,
 }
 
+pub fn is_valid_password(password: &str) -> bool {
+    // must be between 12 and 128 characters
+    // must contain at least one uppercase letter, one lowercase letter, one digit, and one punctuation character
+    if password.len() < 12
+        || password.len() > 128
+        || !password.chars().any(|c| c.is_ascii_uppercase())
+        || !password.chars().any(|c| c.is_ascii_lowercase())
+        || !password.chars().any(|c| c.is_ascii_digit())
+        || !password.chars().any(|c| c.is_ascii_punctuation())
+    {
+        return false;
+    }
+    true
+}
+
 pub async fn sign_up(
     //todo(hayley): remove these locks
     State(user_database): State<Arc<Mutex<UserDatabase>>>,
@@ -75,6 +90,14 @@ pub async fn sign_up(
     let db = user_database.lock().await;
     if !db.is_available(&form.username).await {
         return Ok(StatusCode::CONFLICT);
+    }
+    if !is_valid_password(&form.password) {
+        return Err(crate::error::AppError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            anyhow::anyhow!(
+                "Password must be between 12 and 128 characters and contain at least one uppercase letter, one lowercase letter, one digit, and one punctuation character"
+            ),
+        ));
     }
 
     //todo(hayley): hash the password before storing it, and validate it
@@ -116,4 +139,35 @@ pub async fn confirm_sign_up(
     let db = user_database.lock().await;
     db.activate_user(uuid).await?;
     Ok("Account activated, you can now <a href=\"/login\">login</a>".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_valid_password;
+    #[test]
+    fn valid_password() {
+        assert!(!is_valid_password("aB1.aB1."));
+    }
+
+    #[test]
+    fn password_min_max_length() {
+        assert!(!is_valid_password("aB1."));
+        assert!(is_valid_password(
+            "aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1."
+        ));
+        assert!(!is_valid_password(
+            "aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.."
+        ));
+    }
+    #[test]
+    fn assert_character_set() {
+        // no punc
+        assert!(!is_valid_password("aB1xaB1x"));
+        // no lowercase
+        assert!(!is_valid_password("XB1.XB1."));
+        // no uppercase
+        assert!(!is_valid_password("ab1.ab1."));
+        // no numbers
+        assert!(!is_valid_password("aBi.aBi."));
+    }
 }
