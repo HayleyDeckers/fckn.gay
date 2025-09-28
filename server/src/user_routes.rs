@@ -1,14 +1,16 @@
+use crate::interfaces::PublicSuffix;
 use axum::extract::Json as AxumJson;
 use axum::http::StatusCode;
 use fckn_gay_dns::Record as DnsRecord;
 
 async fn add_record_endpoint(
     State(dns): State<Arc<Mutex<Dns>>>,
+    State(suffix): State<PublicSuffix>,
     authenticed_for: AuthenticatedFor,
     AxumJson(req): AxumJson<DnsRecord>,
 ) -> Result<StatusCode, AppError> {
     // Only allow adding records for the authenticated user
-    let user_pat = format!(".{}.is.fckn.gay", authenticed_for.user_id());
+    let user_pat = format!(".{}{}", authenticed_for.user_id(), suffix);
     if !req.name.ends_with(&user_pat) && req.name != user_pat[1..] {
         return Err(anyhow::anyhow!("Record name must match your user domain").into());
     }
@@ -31,10 +33,11 @@ use tokio::sync::Mutex;
 
 async fn dns_records(
     State(dns): State<Arc<Mutex<Dns>>>,
+    State(suffix): State<PublicSuffix>,
     authenticed_for: AuthenticatedFor,
 ) -> Result<Json<Vec<Record>>, AppError> {
     let records = dns.lock().await.list_records().await?;
-    let pat = format!(".{}.is.fckn.gay", authenticed_for.user_id());
+    let pat = format!(".{}{}", authenticed_for.user_id(), suffix);
     let filtered_records = records
         .into_iter()
         .filter_map(|(_, record)| {

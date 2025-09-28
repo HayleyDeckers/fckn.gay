@@ -11,7 +11,7 @@ use hickory_server::{
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
     store::in_memory::InMemoryAuthority,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use tokio::{
     fs::File,
     io::{AsyncSeekExt, AsyncWriteExt},
@@ -21,9 +21,16 @@ use tokio::{
 /// configuration for the Porkbun DNS provider.
 #[derive(Debug, Deserialize)]
 pub struct Config {
+    #[serde(deserialize_with = "deserialize_name")]
+    zone_name: Name,
     file_path: String,
     tcp_addr: Option<SocketAddr>,
     udp_addr: Option<SocketAddr>,
+}
+
+fn deserialize_name<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Name, D::Error> {
+    let s = String::deserialize(deserializer)?;
+    Name::from_utf8(&s).map_err(serde::de::Error::custom)
 }
 
 /// A DNS provider implementation using Porkbun.
@@ -140,7 +147,7 @@ impl Dns for HickoryDns {
     where
         Self: Sized,
     {
-        let zone_name = Name::from_utf8("is.fckn.gay.").unwrap();
+        let zone_name = config.zone_name;
         let path = PathBuf::from(&config.file_path);
         let mut authority: InMemoryAuthority =
             InMemoryAuthority::empty(zone_name.clone(), ZoneType::Primary, false);

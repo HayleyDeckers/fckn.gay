@@ -3,14 +3,44 @@ use axum::extract::FromRef;
 use fckn_gay_dns::{Dns, Interface as DnsInterface};
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseIntferface};
-use serde::Deserialize;
-use std::sync::Arc;
+use serde::{Deserialize, Deserializer};
+use std::{fmt::Display, sync::Arc};
 use tokio::sync::Mutex;
+
+#[derive(Clone)]
+pub struct PublicSuffix(Arc<String>);
+impl PublicSuffix {
+    pub fn new(suffix: String) -> Self {
+        let suffix = if suffix.starts_with('.') {
+            suffix
+        } else {
+            format!(".{}", suffix)
+        };
+        Self(Arc::new(suffix))
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicSuffix {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let suffix = String::deserialize(deserializer)?;
+        Ok(PublicSuffix::new(suffix))
+    }
+}
+
+impl Display for PublicSuffix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_str())
+    }
+}
 
 #[derive(Deserialize)]
 pub struct Config {
     /// the address of the server
     pub address: String,
+    pub publix_suffix: PublicSuffix,
     pub dns: <Dns as DnsInterface>::Config,
     pub user_database: <UserDatabase as UserDatabaseIntferface>::Config,
     pub email: <Email as EmailInterface>::Config,
@@ -35,6 +65,7 @@ pub struct Interfaces {
     pub email: Arc<Mutex<Email>>,
     /// a cache for login sessions, gets cleared on server restart
     pub auth_cache: Arc<crate::auth_cache::AuthenticationCache>,
+    pub hostname: PublicSuffix,
 }
 
 impl FromRef<Interfaces> for Arc<Mutex<Dns>> {
@@ -59,6 +90,12 @@ impl FromRef<Interfaces> for Arc<crate::auth_cache::AuthenticationCache> {
     }
 }
 
+impl FromRef<Interfaces> for PublicSuffix {
+    fn from_ref(state: &Interfaces) -> Self {
+        state.hostname.clone()
+    }
+}
+
 impl Interfaces {
     /// Creates a new instance of `Interfaces` with the given configuration.
     pub fn new(config: Config) -> Result<Self> {
@@ -75,6 +112,7 @@ impl Interfaces {
             user_database,
             email,
             auth_cache: Arc::new(crate::auth_cache::AuthenticationCache::new()),
+            hostname: config.publix_suffix,
         })
     }
 }

@@ -80,14 +80,14 @@ impl AuthenticationCache {
 }
 
 #[derive(Clone, Debug)]
-pub struct AuthenticatedFor(String);
+pub struct AuthenticatedFor(Arc<String>);
 impl AuthenticatedFor {
     pub fn new(user_id: String) -> Self {
-        Self(user_id)
+        Self(Arc::new(user_id))
     }
 
     pub fn user_id(&self) -> &str {
-        &self.0
+        &self.0.as_str()
     }
 }
 
