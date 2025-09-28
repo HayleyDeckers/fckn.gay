@@ -85,8 +85,8 @@
                 const data = Object.fromEntries(new FormData(form));
                 // Convert record_type to enum
                 data.record_type = data.record_type;
-                if (data.ttl_seconds) data.ttl_seconds = parseInt(data.ttl_seconds);
-                if (data.priority) data.priority = parseInt(data.priority);
+                if (data.ttl_seconds) { data.ttl_seconds = parseInt(data.ttl_seconds) } else { data.ttl_seconds = null };
+                if (data.priority) { data.priority = parseInt(data.priority) } else { data.priority = null };
                 const res = await fetch('/api/add_record', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

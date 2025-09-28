@@ -1,6 +1,6 @@
 use std::{fmt::Display, str::FromStr};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Type of the DNS record.
 // reduced functionality to match the current state of the project
@@ -25,10 +25,23 @@ pub struct Record {
     pub name: String,
     pub record_type: RecordType,
     pub content: String,
-    #[serde(default = "default_ttl_seconds")]
+    #[serde(deserialize_with = "deserialize_ttl")]
     pub ttl_seconds: u32, // Time to live in seconds
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub priority: Option<u16>,
+}
+
+// deserialize ttl from null to the default
+fn deserialize_ttl<'de, D: Deserializer<'de>>(deserialize: D) -> Result<u32, D::Error> {
+    const MIN_TTL_SECONDS: u32 = 300;
+    let opt = Option::deserialize(deserialize)?;
+    if let Some(ttl) = opt
+        && ttl >= MIN_TTL_SECONDS
+    {
+        Ok(ttl)
+    } else {
+        Ok(MIN_TTL_SECONDS)
+    }
 }
 
 impl Display for RecordType {
@@ -133,10 +146,6 @@ impl FromStr for Record {
             });
         }
     }
-}
-
-fn default_ttl_seconds() -> u32 {
-    300
 }
 
 /// a trait for setting up a DNS provider
