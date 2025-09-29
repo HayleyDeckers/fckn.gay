@@ -1,0 +1,12 @@
+include = ["**/*.toml", "*.toml"]
+
+[formatting]
+allowed_blank_lines = 1
+column_width = 120
+reorder_arrays = true
+reorder_keys = false
+
+[[rule]]
+include = ["**/Cargo.toml"]
+keys = ["build-dependencies", "dependencies", "dev-dependencies", "workspace.dependencies", "workspace.lints.clippy"]
+formatting = { reorder_keys = true }
