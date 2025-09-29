@@ -1,4 +1,5 @@
-use crate::auth_cache::AuthenticationCache;
+use std::{sync::Arc, time::Instant};
+
 use anyhow::anyhow;
 use axum::{
     extract::{Form, Path, State},
@@ -8,8 +9,9 @@ use axum::{
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseInterface};
-use std::{sync::Arc, time::Instant};
 use tokio::sync::Mutex;
+
+use crate::auth_cache::AuthenticationCache;
 
 #[derive(serde::Deserialize)]
 pub struct Login {
@@ -173,9 +175,8 @@ pub async fn confirm_sign_up(
 
 #[cfg(test)]
 mod tests {
-    use crate::login::is_valid_username;
-
     use super::is_valid_password;
+    use crate::login::is_valid_username;
     #[test]
     fn valid_password() {
         assert!(is_valid_password("aB1.aB1.aB1."));

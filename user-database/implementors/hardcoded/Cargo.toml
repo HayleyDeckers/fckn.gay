@@ -8,7 +8,8 @@ workspace = true
 
 [dependencies]
 fckn-gay-user-database-interface = { path = "../../interface" }
-serde.workspace = true
-uuid.workspace = true
-tokio = { workspace = true, features = ["sync"] }
+
 chrono.workspace = true
+serde.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+uuid.workspace = true

@@ -8,5 +8,6 @@ workspace = true
 
 [dependencies]
 fckn-gay-user-database-interface = { path = "../../interface" }
-serde.workspace = true
+
 csv.workspace = true
+serde.workspace = true

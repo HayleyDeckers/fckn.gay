@@ -7,10 +7,12 @@ edition = "2024"
 workspace = true
 
 [dependencies]
+chrono.workspace = true
+diesel.workspace = true
 fckn-gay-user-database-interface = { path = "../../interface" }
 serde.workspace = true
-diesel.workspace = true
-tokio = { workspace = true, features = ["sync"] }
 thiserror.workspace = true
-chrono.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+
+#forces bundled sqlite to be used, making it easier to build everywhere
 libsqlite3-sys = { version = "0.33", features = ["bundled"] }

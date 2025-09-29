@@ -3,13 +3,11 @@ name = "fckn-gay-dns-hickory"
 version = "0.1.0"
 edition = "2024"
 
-[lints]
-workspace = true
-
 [dependencies]
 fckn-gay-dns-interface = { path = "../../interface" }
-hickory-server = { workspace = true, features = ["sqlite"] }
+
+async-trait = { workspace = true }
+hickory-server = { workspace = true }
+libsqlite3-sys = { version = "0.33", features = ["bundled"] }
 serde.workspace = true
 tokio = { workspace = true, features = ["sync"] }
-async-trait = { workspace = true }
-libsqlite3-sys = { version = "0.33", features = ["bundled"] }

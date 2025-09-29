@@ -8,5 +8,6 @@ workspace = true
 
 [dependencies]
 fckn-gay-dns-interface = { path = "../../interface" }
+
 porkbun-api = { workspace = true, features = ["default-client"] }
 serde.workspace = true

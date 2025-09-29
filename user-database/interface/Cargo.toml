@@ -7,7 +7,7 @@ edition = "2024"
 workspace = true
 
 [dependencies]
+chrono.workspace = true
+password-auth.workspace = true
 serde.workspace = true
 uuid.workspace = true
-password-auth.workspace = true
-chrono.workspace = true

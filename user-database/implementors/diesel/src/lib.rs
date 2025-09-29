@@ -1,8 +1,7 @@
 mod models;
 mod schema;
-use fckn_gay_user_database_interface::{PasswordHash, UserDatabase, UserEntry};
-
 use diesel::prelude::*;
+use fckn_gay_user_database_interface::{PasswordHash, UserDatabase, UserEntry};
 
 #[derive(serde::Deserialize)]
 pub struct Config {

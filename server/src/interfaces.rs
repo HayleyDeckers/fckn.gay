@@ -1,10 +1,11 @@
+use std::{fmt::Display, sync::Arc};
+
 use anyhow::{Context, Result};
 use axum::extract::FromRef;
 use fckn_gay_dns::{Dns, Interface as DnsInterface};
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseIntferface};
 use serde::{Deserialize, Deserializer};
-use std::{fmt::Display, sync::Arc};
 use tokio::sync::Mutex;
 
 #[derive(Clone)]

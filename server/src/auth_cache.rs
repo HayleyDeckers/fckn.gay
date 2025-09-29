@@ -1,6 +1,4 @@
-use std::time::Instant;
-use std::{collections::BTreeMap, sync::Arc};
-use tokio::sync::RwLock;
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 use axum::{
     extract::{FromRequestParts, Request, State},
@@ -9,6 +7,7 @@ use axum::{
     response::{Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
+use tokio::sync::RwLock;
 
 pub struct LoginToken {
     expires_at: Instant,

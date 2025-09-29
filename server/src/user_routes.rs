@@ -1,7 +1,7 @@
-use crate::interfaces::PublicSuffix;
-use axum::extract::Json as AxumJson;
-use axum::http::StatusCode;
+use axum::{extract::Json as AxumJson, http::StatusCode};
 use fckn_gay_dns::Record as DnsRecord;
+
+use crate::interfaces::PublicSuffix;
 
 async fn add_record_endpoint(
     State(dns): State<Arc<Mutex<Dns>>>,
@@ -19,10 +19,6 @@ async fn add_record_endpoint(
 }
 use std::sync::Arc;
 
-use crate::{
-    auth_cache::{AuthenticatedFor, add_authorization_or_unauthorized, redirect_if_unauthorized},
-    error::AppError,
-};
 use axum::{
     Router,
     extract::{Json, State},
@@ -30,6 +26,11 @@ use axum::{
 };
 use fckn_gay_dns::{Dns, Interface as DnsInterface, Record};
 use tokio::sync::Mutex;
+
+use crate::{
+    auth_cache::{AuthenticatedFor, add_authorization_or_unauthorized, redirect_if_unauthorized},
+    error::AppError,
+};
 
 async fn dns_records(
     State(dns): State<Arc<Mutex<Dns>>>,
