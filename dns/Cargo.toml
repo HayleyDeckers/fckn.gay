@@ -2,13 +2,14 @@
 name = "fckn-gay-dns"
 version = "0.1.0"
 edition = "2024"
+publish = false
 
 [lints]
 workspace = true
 
 [dependencies]
-fckn-gay-dns-interface = { path = "./interface" }
-fckn-gay-dns-porkbun = { path = "./implementors/porkbun" }
 fckn-gay-dns-dummy = { path = "./implementors/dummy" }
 fckn-gay-dns-hickory = { path = "./implementors/hickory" }
+fckn-gay-dns-interface = { path = "./interface" }
+fckn-gay-dns-porkbun = { path = "./implementors/porkbun" }
 serde.workspace = true

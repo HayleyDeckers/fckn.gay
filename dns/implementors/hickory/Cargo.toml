@@ -2,6 +2,7 @@
 name = "fckn-gay-dns-hickory"
 version = "0.1.0"
 edition = "2024"
+publish = false
 
 [dependencies]
 fckn-gay-dns-interface = { path = "../../interface" }
