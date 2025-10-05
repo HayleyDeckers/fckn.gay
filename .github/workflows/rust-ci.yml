@@ -49,6 +49,12 @@ jobs:
             command: |
               cargo install cargo-deny --locked --version ^0.18.5
               cargo deny check all
+          - job: taplo
+            toolchain: stable
+            timeout: 5
+            command: |
+              cargo install taplo-cli --locked --version ^0.8
+              taplo format --check 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
