@@ -11,7 +11,7 @@ jobs:
     name: ${{ matrix.job }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ matrix.timeout }}
-    continue-on-error: ${{ matrix.job == 'cargo-outdated' || matrix.job == 'cargo-udeps' }}
+    continue-on-error: ${{ matrix.job == 'cargo-outdated' || matrix.job == 'cargo-udeps' || matrix.job == 'cargo-deny' }}
     strategy:
       matrix:
         include:
@@ -43,6 +43,12 @@ jobs:
             command: |
               cargo install cargo-outdated --version ^0.17 || true
               cargo outdated --exit-code 1
+          - job: cargo-deny
+            toolchain: stable
+            timeout: 10
+            command: |
+              cargo install cargo-deny --locked --version ^0.18.5
+              cargo deny check all
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,22 +65,5 @@ jobs:
       - name: Run ${{ matrix.job }}
         run: ${{ matrix.command }}
 
-  deny:
-    name: cargo-deny
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --locked --version ^0.18.5
-      - name: Run cargo-deny
-        run: cargo deny check all
 
 
