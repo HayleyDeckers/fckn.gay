@@ -11,6 +11,7 @@ jobs:
     name: ${{ matrix.job }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ matrix.timeout }}
+    continue-on-error: ${{ matrix.job == 'cargo-outdated' || matrix.job == 'cargo-udeps' }}
     strategy:
       matrix:
         include:
@@ -36,6 +37,12 @@ jobs:
             command: |
               cargo +nightly install cargo-udeps --locked --version ^0.1 || true
               cargo +nightly udeps --all-targets --all-features
+          - job: cargo-outdated
+            toolchain: stable
+            timeout: 10
+            command: |
+              cargo install cargo-outdated --locked --version ^0.12 || true
+              cargo outdated --exit-code 1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
