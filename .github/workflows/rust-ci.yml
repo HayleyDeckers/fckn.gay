@@ -41,7 +41,7 @@ jobs:
             toolchain: stable
             timeout: 10
             command: |
-              cargo install cargo-outdated --locked --version ^0.12 || true
+              cargo install cargo-outdated --version ^0.17 || true
               cargo outdated --exit-code 1
     steps:
       - name: Checkout
