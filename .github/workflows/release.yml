@@ -1,0 +1,137 @@
+# Release pipeline to build multi-OS binaries and publish a GitHub Release
+name: Release Build & Publish
+
+on:
+  # Manual trigger with inputs for tag/prerelease
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to release (e.g., v0.1.0)"
+        required: true
+      prerelease:
+        description: "Mark as pre-release"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Targets we build for; mac uses Apple Silicon (aarch64)
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ext: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            ext: tar.gz
+          - os: macos-14 # macOS 14+ has arm64 runners
+            target: aarch64-apple-darwin
+            ext: zip
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ext: zip
+
+    steps:
+      # Fetch repository contents
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install stable Rust toolchain
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      # Cache Cargo build artifacts to speed up repeats
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # Ensure the target triple is installed for cross/alt builds
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      # Cross-compiler needed to build aarch64 GNU on Ubuntu
+      - name: Install cross-compiler for linux aarch64
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      # Build release binaries for the target triple
+      - name: Build release
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # Package Linux artifacts as tar.gz
+      - name: Package artifact (linux tar.gz)
+        if: runner.os != 'Windows' && matrix.ext == 'tar.gz'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BIN_NAME=fckn-gay-server
+          OUT_DIR=dist
+          mkdir -p "$OUT_DIR"
+          cp target/${{ matrix.target }}/release/$BIN_NAME "$OUT_DIR"/
+          tar -czf "$OUT_DIR/${BIN_NAME}-${{ inputs.tag }}-${{ matrix.target }}.tar.gz" -C "$OUT_DIR" $BIN_NAME
+
+      # Package macOS artifacts as zip
+      - name: Package artifact (macOS zip)
+        if: runner.os != 'Windows' && matrix.ext == 'zip'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BIN_NAME=fckn-gay-server
+          OUT_DIR=dist
+          mkdir -p "$OUT_DIR"
+          cp target/${{ matrix.target }}/release/$BIN_NAME "$OUT_DIR"/
+          cd "$OUT_DIR"
+          zip -9 "${BIN_NAME}-${{ inputs.tag }}-${{ matrix.target }}.zip" "$BIN_NAME"
+
+      # Package Windows artifacts as zip
+      - name: Package artifact (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $BinName = 'fckn-gay-server.exe'
+          $OutDir = 'dist'
+          New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/$BinName" $OutDir/
+          Compress-Archive -Path "$OutDir/$BinName" -DestinationPath "$OutDir/fckn-gay-server-${{ inputs.tag }}-${{ matrix.target }}.zip" -Force
+
+      # Upload per-target artifacts to pass between jobs and for download
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fckn-gay-server-${{ inputs.tag }}-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      # Collect all artifacts from matrix builds
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      # Create/overwrite the GitHub Release for the provided tag and upload files
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          prerelease: ${{ inputs.prerelease }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/**/**.tar.gz
+            dist/**/**.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
