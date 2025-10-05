@@ -1,0 +1,45 @@
+name: Rust CI
+
+on:
+  push:
+    branches: ["‮"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  ci:
+    name: fmt • clippy • build • test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Check out the repository code so subsequent steps can access it
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install the stable Rust toolchain (lets us pin to 'stable' across runners)
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      # Cache Cargo artifacts to speed up builds between CI runs
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # Enforce formatting. Fails if any file is not rustfmt'ed
+      - name: rustfmt (check)
+        run: cargo fmt --all -- --check
+
+      # Lint all targets and features; treat warnings as errors (clean code or bust :3)
+      - name: clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Compile the entire workspace in debug mode to verify it builds
+      - name: Build (debug)
+        run: cargo build --all --verbose
+
+      # Run the full test suite across all features, no early bailouts
+      - name: Tests (all features)
+        run: cargo test --all --all-features --no-fail-fast --verbose
+
+
