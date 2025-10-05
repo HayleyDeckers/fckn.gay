@@ -14,9 +14,40 @@ on:
         default: false
         type: boolean
 
+  # Auto-trigger on version tags (e.g., v1.2.3 or v1.2.3-rc1)
+  push:
+    tags:
+      - "v*"
+
 jobs:
+  meta:
+    name: derive release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.compute.outputs.tag }}
+      prerelease: ${{ steps.compute.outputs.prerelease }}
+    steps:
+      - id: compute
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+            PRERELEASE="${{ inputs.prerelease }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            # If tag ends with -rcN, mark as prerelease automatically
+            if [[ "$TAG" =~ -rc[0-9]*$ ]]; then
+              PRERELEASE=true
+            else
+              PRERELEASE=false
+            fi
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
   build:
     name: build (${{ matrix.os }})
+    needs: meta
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -74,7 +105,7 @@ jobs:
           OUT_DIR=dist
           mkdir -p "$OUT_DIR"
           cp target/${{ matrix.target }}/release/$BIN_NAME "$OUT_DIR"/
-          tar -czf "$OUT_DIR/${BIN_NAME}-${{ inputs.tag }}-${{ matrix.target }}.tar.gz" -C "$OUT_DIR" $BIN_NAME
+          tar -czf "$OUT_DIR/${BIN_NAME}-${{ needs.meta.outputs.tag }}-${{ matrix.target }}.tar.gz" -C "$OUT_DIR" $BIN_NAME
 
       # Package macOS artifacts as zip
       - name: Package artifact (macOS zip)
@@ -87,7 +118,7 @@ jobs:
           mkdir -p "$OUT_DIR"
           cp target/${{ matrix.target }}/release/$BIN_NAME "$OUT_DIR"/
           cd "$OUT_DIR"
-          zip -9 "${BIN_NAME}-${{ inputs.tag }}-${{ matrix.target }}.zip" "$BIN_NAME"
+          zip -9 "${BIN_NAME}-${{ needs.meta.outputs.tag }}-${{ matrix.target }}.zip" "$BIN_NAME"
 
       # Package Windows artifacts as zip
       - name: Package artifact (windows)
@@ -99,20 +130,20 @@ jobs:
           $OutDir = 'dist'
           New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/$BinName" $OutDir/
-          Compress-Archive -Path "$OutDir/$BinName" -DestinationPath "$OutDir/fckn-gay-server-${{ inputs.tag }}-${{ matrix.target }}.zip" -Force
+          Compress-Archive -Path "$OutDir/$BinName" -DestinationPath "$OutDir/fckn-gay-server-${{ needs.meta.outputs.tag }}-${{ matrix.target }}.zip" -Force
 
       # Upload per-target artifacts to pass between jobs and for download
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fckn-gay-server-${{ inputs.tag }}-${{ matrix.target }}
+          name: fckn-gay-server-${{ needs.meta.outputs.tag }}-${{ matrix.target }}
           path: |
             dist/*.tar.gz
             dist/*.zip
 
   release:
     name: publish release
-    needs: build
+    needs: [meta, build]
     runs-on: ubuntu-latest
     steps:
       # Collect all artifacts from matrix builds
@@ -125,8 +156,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag }}
-          prerelease: ${{ inputs.prerelease }}
+          tag_name: ${{ needs.meta.outputs.tag }}
+          prerelease: ${{ needs.meta.outputs.prerelease }}
           fail_on_unmatched_files: true
           files: |
             dist/**/**.tar.gz
