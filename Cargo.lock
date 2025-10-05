@@ -643,7 +643,6 @@ dependencies = [
  "async-trait",
  "fckn-gay-dns-interface",
  "hickory-server",
- "libsqlite3-sys",
  "serde",
  "tokio",
 ]

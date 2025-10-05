@@ -9,6 +9,5 @@ fckn-gay-dns-interface = { path = "../../interface" }
 
 async-trait = { workspace = true }
 hickory-server = { workspace = true }
-libsqlite3-sys = { version = "0.33", features = ["bundled"] }
 serde.workspace = true
 tokio = { workspace = true, features = ["sync"] }

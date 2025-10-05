@@ -8,45 +8,61 @@ on:
 
 jobs:
   ci:
-    name: fmt • clippy • deny • build • test
+    name: ${{ matrix.job }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      matrix:
+        include:
+          - job: rustfmt
+            toolchain: stable
+            timeout: 10
+            command: cargo fmt --all -- --check
+          - job: clippy
+            toolchain: stable
+            timeout: 15
+            command: cargo clippy --all-targets --all-features -- -D warnings
+          - job: build
+            toolchain: stable
+            timeout: 15
+            command: cargo build --all --verbose
+          - job: test
+            toolchain: stable
+            timeout: 20
+            command: cargo test --all --all-features --no-fail-fast --verbose
+          - job: cargo-udeps
+            toolchain: nightly
+            timeout: 15
+            command: |
+              cargo +nightly install cargo-udeps --locked --version ^0.1 || true
+              cargo +nightly udeps --all-targets --all-features
     steps:
-      # Check out the repository code so subsequent steps can access it
       - name: Checkout
         uses: actions/checkout@v4
-
-      # Install the stable Rust toolchain (lets us pin to 'stable' across runners)
       - name: Install Rust (stable)
+        if: matrix.toolchain == 'stable'
         uses: dtolnay/rust-toolchain@stable
-
-      # Cache Cargo artifacts to speed up builds between CI runs
+      - name: Install Rust (nightly)
+        if: matrix.toolchain == 'nightly'
+        uses: dtolnay/rust-toolchain@nightly
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      - name: Run ${{ matrix.job }}
+        run: ${{ matrix.command }}
 
-      # Enforce formatting. Fails if any file is not rustfmt'ed
-      - name: rustfmt (check)
-        run: cargo fmt --all -- --check
-
-      # Lint all targets and features; treat warnings as errors (clean code or bust :3)
-      - name: clippy (deny warnings)
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
-      # Audit licenses/vulns/bans via cargo-deny
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: cargo-deny (advisories, bans, licenses)
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check all
           arguments: --all-features
-
-      # Compile the entire workspace in debug mode to verify it builds
-      - name: Build (debug)
-        run: cargo build --all --verbose
-
-      # Run the full test suite across all features, no early bailouts
-      - name: Tests (all features)
-        run: cargo test --all --all-features --no-fail-fast --verbose
 
 
