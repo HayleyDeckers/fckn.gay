@@ -75,6 +75,6 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked --version ^0.18.5
       - name: Run cargo-deny
-        run: cargo deny check all --config deny.toml 
+        run: cargo deny check all
 
 
