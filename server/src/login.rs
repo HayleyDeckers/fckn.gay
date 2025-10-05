@@ -34,7 +34,7 @@ pub async fn login(
         let token = auth_cache
             .new_token_for(
                 form.username,
-                Instant::now() + std::time::Duration::from_hours(4),
+                Instant::now() + std::time::Duration::from_secs(60 * 60 * 4),
             )
             .await
             .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -132,8 +132,6 @@ pub async fn sign_up(
         ));
     }
 
-    //todo(hayley): hash the password before storing it, and validate it
-    //todo(hayley): check here for availablity on the error message and return conflict if not available.
     // this is safe for now since we do check in `add_user` but we can race.
     let Ok(uuid) = db
         .add_user(&form.username, &form.password, &form.email)
