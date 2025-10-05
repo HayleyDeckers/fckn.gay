@@ -66,10 +66,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: cargo-deny (advisories, bans, licenses)
-        uses: EmbarkStudios/cargo-deny-action@v2
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
         with:
-          command: check all
-          arguments: --all-features
+          cache-on-failure: true
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked --version ^0.18.5
+      - name: Run cargo-deny
+        run: cargo deny check all --config deny.toml 
 
 
