@@ -7,6 +7,7 @@ use axum::{
 };
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseInterface};
+use fckn_gay_validation::{is_valid_password, is_valid_username};
 use tokio::sync::Mutex;
 
 use crate::error::AppError;
@@ -18,41 +19,6 @@ pub struct Signup {
     email: String,
 }
 
-pub fn is_valid_username(username: &str) -> bool {
-    // must be a valid dns label, which is
-    // atleast 1 character, max 63
-    // ascii alphanumeric or '-'
-    // may not start or end with a '-'.
-    // we also require it is all lowercase, since dns is case-insensitive
-    let len = username.len();
-    if len == 0 || len > 63 {
-        return false;
-    }
-    if username.starts_with('-') || username.ends_with('-') {
-        return false;
-    }
-    for char in username.chars() {
-        if !(char.is_ascii_lowercase() || char.is_ascii_digit() || (char == '-')) {
-            return false;
-        }
-    }
-    true
-}
-
-pub fn is_valid_password(password: &str) -> bool {
-    // must be between 12 and 128 characters
-    // must contain at least one uppercase letter, one lowercase letter, one digit, and one punctuation character
-    if password.len() < 12
-        || password.len() > 128
-        || !password.chars().any(|c| c.is_ascii_uppercase())
-        || !password.chars().any(|c| c.is_ascii_lowercase())
-        || !password.chars().any(|c| c.is_ascii_digit())
-        || !password.chars().any(|c| c.is_ascii_punctuation())
-    {
-        return false;
-    }
-    true
-}
 
 pub async fn sign_up(
     //todo(hayley): remove these locks
@@ -64,20 +30,19 @@ pub async fn sign_up(
     if !db.is_available(&form.username).await {
         return Ok(StatusCode::CONFLICT);
     }
-    if !is_valid_username(&form.username) {
+    let username_result = is_valid_username(&form.username);
+    if !username_result.is_valid {
         return Err(AppError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            anyhow!(
-                "Username must be between 1 and 63 characters, lowercase ascii alphanumeric or '-', and must not start or end with '-'"
-            ),
+            anyhow!("Username validation failed: {}", username_result.errors.join(", ")),
         ));
     }
-    if !is_valid_password(&form.password) {
+    
+    let password_result = is_valid_password(&form.password);
+    if !password_result.is_valid {
         return Err(AppError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            anyhow::anyhow!(
-                "Password must be between 12 and 128 characters and contain at least one uppercase letter, one lowercase letter, one digit, and one punctuation character"
-            ),
+            anyhow!("Password validation failed: {}", password_result.errors.join(", ")),
         ));
     }
 
@@ -122,75 +87,74 @@ pub async fn confirm_sign_up(
 
 #[cfg(test)]
 mod tests {
-    use super::is_valid_password;
-    use crate::auth::signup::is_valid_username;
+    use fckn_gay_validation::{is_valid_password, is_valid_username};
     #[test]
     fn valid_password() {
-        assert!(is_valid_password("aB1.aB1.aB1."));
+        assert!(is_valid_password("aB1.aB1.aB1.").is_valid);
     }
 
     #[test]
     fn password_min_max_length() {
-        assert!(!is_valid_password("aB1."));
+        assert!(!is_valid_password("aB1.").is_valid);
         assert!(is_valid_password(
             "aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1."
-        ));
+        ).is_valid);
         assert!(!is_valid_password(
             "aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.aB1.."
-        ));
+        ).is_valid);
     }
     #[test]
     fn password_character_set() {
         // no punc
-        assert!(!is_valid_password("aB1xaB1xaB1xa"));
+        assert!(!is_valid_password("aB1xaB1xaB1xa").is_valid);
         // no lowercase
-        assert!(!is_valid_password("XB1.XB1.XB1."));
+        assert!(!is_valid_password("XB1.XB1.XB1.").is_valid);
         // no uppercase
-        assert!(!is_valid_password("ab1.ab1.ab1."));
+        assert!(!is_valid_password("ab1.ab1.ab1.").is_valid);
         // no numbers
-        assert!(!is_valid_password("aBi.aBi.aBi."));
+        assert!(!is_valid_password("aBi.aBi.aBi.").is_valid);
     }
 
     #[test]
     fn valid_username() {
-        assert!(is_valid_username("username"));
-        assert!(is_valid_username("i"));
+        assert!(is_valid_username("username").is_valid);
+        assert!(is_valid_username("i").is_valid);
     }
 
     #[test]
     fn username_min_max_length() {
-        assert!(!is_valid_username(""));
-        assert!(is_valid_username("x"));
+        assert!(!is_valid_username("").is_valid);
+        assert!(is_valid_username("x").is_valid);
         let len_63 = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
         assert_eq!(len_63.len(), 63);
         let len_64 = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
         assert_eq!(len_64.len(), 64);
-        assert!(!is_valid_username(len_64));
+        assert!(!is_valid_username(len_64).is_valid);
     }
 
     #[test]
     fn username_character_set() {
         // not start with -
-        assert!(!is_valid_username("-username"));
+        assert!(!is_valid_username("-username").is_valid);
         // not end with -
-        assert!(!is_valid_username("username-"));
+        assert!(!is_valid_username("username-").is_valid);
         // all lowercase
-        assert!(!is_valid_username("uSeRnaMe"));
+        assert!(!is_valid_username("uSeRnaMe").is_valid);
         // do allow all digits
-        assert!(is_valid_username("5"));
+        assert!(is_valid_username("5").is_valid);
         // don't allow emoji
-        assert!(!is_valid_username("🐛"));
+        assert!(!is_valid_username("🐛").is_valid);
         // but punycode should work
-        assert!(is_valid_username("xn--jo8h"));
+        assert!(is_valid_username("xn--jo8h").is_valid);
         // no underscores
-        assert!(!is_valid_username("user_name"));
+        assert!(!is_valid_username("user_name").is_valid);
         // also not at the start
-        assert!(!is_valid_username("_username"));
+        assert!(!is_valid_username("_username").is_valid);
         // no whitespace
-        assert!(!is_valid_username("user name"));
+        assert!(!is_valid_username("user name").is_valid);
         // no dots
-        assert!(!is_valid_username("user.name"));
+        assert!(!is_valid_username("user.name").is_valid);
         // no ü
-        assert!(!is_valid_username("üsername"));
+        assert!(!is_valid_username("üsername").is_valid);
     }
 }

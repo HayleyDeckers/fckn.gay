@@ -12,6 +12,7 @@ workspace = true
 fckn-gay-dns.workspace = true
 fckn-gay-email.workspace = true
 fckn-gay-user-database.workspace = true
+fckn-gay-validation.workspace = true
 
 # other dependencies
 anyhow.workspace = true
