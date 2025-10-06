@@ -57,7 +57,7 @@ async fn add_record(
 pub fn router(appstate: crate::Interfaces) -> Router<crate::Interfaces> {
     Router::new()
         .route("/records", get(get_records))
-        .route("/records", post(add_record))
+        .route("/add_record", post(add_record))
         .layer(from_fn_with_state(
             appstate.auth_cache.clone(),
             add_authorization_or_unauthorized,
