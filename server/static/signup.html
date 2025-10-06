@@ -111,28 +111,45 @@
         // Setup validation when DOM is ready
         document.addEventListener('DOMContentLoaded', setupValidation);
 
-        async function try_signup() {
-            // Check if WASM module is loaded
-            if (!wasmModule) {
-                alert("Validation system is still loading. Please wait a moment and try again.");
-                return;
-            }
-            
+        // Shake animation for invalid fields
+        function shakeField(fieldId) {
+            const field = document.getElementById(fieldId);
+            field.style.animation = 'shake 0.5s ease-in-out';
+            setTimeout(() => {
+                field.style.animation = '';
+            }, 500);
+        }
+        
+        window.try_signup = async function() {
             const element = document.getElementById("signup_form");
             const form_data = new FormData(element);
             const data = new URLSearchParams(form_data);
             
-            const username = form_data.get('username');
-            const password = form_data.get('password');
-            
-            // Client-side validation
-            const validation = validateCredentials(username, password);
-            if (!validation.is_valid) {
-                showFieldError('username_', validation.errors.filter(e => e.includes('Username')));
-                showFieldError('password_', validation.errors.filter(e => e.includes('Password')));
-                alert("Please fix the validation errors before submitting.");
-                return;
+            // If WASM module is loaded, do client-side validation
+            if (wasmModule) {
+                const username = form_data.get('username');
+                const password = form_data.get('password');
+                
+                // Client-side validation
+                const validation = validateCredentials(username, password);
+                if (!validation.is_valid) {
+                    const usernameErrors = validation.errors.filter(e => e.includes('Username'));
+                    const passwordErrors = validation.errors.filter(e => e.includes('Password'));
+                    
+                    showFieldError('username_', usernameErrors);
+                    showFieldError('password_', passwordErrors);
+                    
+                    // Shake the fields that have errors
+                    if (usernameErrors.length > 0) {
+                        shakeField('username_');
+                    }
+                    if (passwordErrors.length > 0) {
+                        shakeField('password_');
+                    }
+                    return;
+                }
             }
+            // If WASM not loaded yet, just yeet it to the server (fallback behavior)
             
             var response = await fetch("/signup", {
                 method: "POST",
@@ -163,6 +180,12 @@
         input.valid {
             border-color: #44ff44 !important;
             background-color: #e6ffe6 !important;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
         }
     </style>
 </head>
