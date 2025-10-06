@@ -16,7 +16,7 @@
                 </tr>`;
 
 
-            var response = await fetch("/api/records");
+            var response = await fetch("/api/dns/records");
             if (response.ok) {
                 var records = await response.json();
             } else {
@@ -87,7 +87,7 @@
                 data.record_type = data.record_type;
                 if (data.ttl_seconds) { data.ttl_seconds = parseInt(data.ttl_seconds) } else { data.ttl_seconds = null };
                 if (data.priority) { data.priority = parseInt(data.priority) } else { data.priority = null };
-                const res = await fetch('/api/add_record', {
+                const res = await fetch('/api/dns/records', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)

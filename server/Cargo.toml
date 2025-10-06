@@ -21,4 +21,4 @@ getrandom.workspace = true
 serde.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 toml.workspace = true
-tower-http = { workspace = true, features = ["fs"] }
+tower-http = { workspace = true, features = ["catch-panic", "fs"] }
