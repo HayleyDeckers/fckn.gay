@@ -19,7 +19,6 @@ pub struct Signup {
     email: String,
 }
 
-
 pub async fn sign_up(
     //todo(hayley): remove these locks
     State(user_database): State<Arc<Mutex<UserDatabase>>>,
@@ -34,15 +33,21 @@ pub async fn sign_up(
     if !username_result.is_valid {
         return Err(AppError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            anyhow!("Username validation failed: {}", username_result.errors.join(", ")),
+            anyhow!(
+                "Username validation failed: {}",
+                username_result.errors.join(", ")
+            ),
         ));
     }
-    
+
     let password_result = is_valid_password(&form.password);
     if !password_result.is_valid {
         return Err(AppError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            anyhow!("Password validation failed: {}", password_result.errors.join(", ")),
+            anyhow!(
+                "Password validation failed: {}",
+                password_result.errors.join(", ")
+            ),
         ));
     }
 

@@ -8,6 +8,12 @@ pub struct ValidationResult {
     pub errors: Vec<String>,
 }
 
+impl Default for ValidationResult {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ValidationResult {
     pub fn new() -> Self {
         Self {
@@ -56,7 +62,9 @@ pub fn is_valid_username(username: &str) -> ValidationResult {
 
     for char in username.chars() {
         if !(char.is_ascii_lowercase() || char.is_ascii_digit() || (char == '-')) {
-            errors.push("Username can only contain lowercase letters, numbers, and dashes".to_string());
+            errors.push(
+                "Username can only contain lowercase letters, numbers, and dashes".to_string(),
+            );
             break; // Only show this error once
         }
     }
@@ -101,11 +109,11 @@ pub fn is_valid_password(password: &str) -> ValidationResult {
 pub fn validate_credentials(username: &str, password: &str) -> ValidationResult {
     let username_result = is_valid_username(username);
     let password_result = is_valid_password(password);
-    
+
     let mut all_errors = Vec::new();
     all_errors.extend(username_result.errors);
     all_errors.extend(password_result.errors);
-    
+
     ValidationResult {
         is_valid: all_errors.is_empty(),
         errors: all_errors,
@@ -116,19 +124,22 @@ pub fn validate_credentials(username: &str, password: &str) -> ValidationResult 
 #[wasm_bindgen]
 pub fn validate_username_wasm(username: &str) -> String {
     let result = is_valid_username(username);
-    serde_json::to_string(&result).unwrap_or_else(|_| r#"{"is_valid":false,"errors":["Serialization error"]}"#.to_string())
+    serde_json::to_string(&result)
+        .unwrap_or_else(|_| r#"{"is_valid":false,"errors":["Serialization error"]}"#.to_string())
 }
 
 #[wasm_bindgen]
 pub fn validate_password_wasm(password: &str) -> String {
     let result = is_valid_password(password);
-    serde_json::to_string(&result).unwrap_or_else(|_| r#"{"is_valid":false,"errors":["Serialization error"]}"#.to_string())
+    serde_json::to_string(&result)
+        .unwrap_or_else(|_| r#"{"is_valid":false,"errors":["Serialization error"]}"#.to_string())
 }
 
 #[wasm_bindgen]
 pub fn validate_credentials_wasm(username: &str, password: &str) -> String {
     let result = validate_credentials(username, password);
-    serde_json::to_string(&result).unwrap_or_else(|_| r#"{"is_valid":false,"errors":["Serialization error"]}"#.to_string())
+    serde_json::to_string(&result)
+        .unwrap_or_else(|_| r#"{"is_valid":false,"errors":["Serialization error"]}"#.to_string())
 }
 
 // Console logging for debugging
@@ -187,11 +198,11 @@ mod tests {
     fn test_validate_credentials() {
         let result = validate_credentials("validuser", "ValidPass123!");
         assert!(result.is_valid);
-        
+
         let result = validate_credentials("", "ValidPass123!");
         assert!(!result.is_valid);
         assert!(result.errors.iter().any(|e| e.contains("empty")));
-        
+
         let result = validate_credentials("validuser", "weak");
         assert!(!result.is_valid);
         assert!(result.errors.iter().any(|e| e.contains("12 characters")));
