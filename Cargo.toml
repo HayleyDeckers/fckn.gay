@@ -34,3 +34,8 @@ uuid = { version = "1.18.1", features = ["serde", "v4"] }
 [workspace.lints.clippy]
 # allow for now because signatures might change  
 new_without_default = "allow"
+
+# For WASM builds
+[profile.release]
+lto = true
+opt-level = "s"

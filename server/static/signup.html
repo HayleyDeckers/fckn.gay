@@ -6,7 +6,7 @@
     <title>Signup</title>
     <meta charset="utf-8" />
     <script type="module">
-        import init, { validate_username_wasm, validate_password_wasm, validate_credentials_wasm } from './fckn_gay_validation.js';
+        import init, { validate_username_wasm, validate_password_wasm } from './fckn_gay_validation.js';
 
         let wasmModule = null;
 
@@ -26,39 +26,6 @@
         // Initialize on page load
         initWasm();
 
-        // Validation functions
-        function validateUsername(username) {
-            if (!wasmModule) return { is_valid: true, errors: [] };
-            try {
-                const result = validate_username_wasm(username);
-                return JSON.parse(result);
-            } catch (error) {
-                console.error('Username validation error:', error);
-                return { is_valid: true, errors: [] };
-            }
-        }
-
-        function validatePassword(password) {
-            if (!wasmModule) return { is_valid: true, errors: [] };
-            try {
-                const result = validate_password_wasm(password);
-                return JSON.parse(result);
-            } catch (error) {
-                console.error('Password validation error:', error);
-                return { is_valid: true, errors: [] };
-            }
-        }
-
-        function validateCredentials(username, password) {
-            if (!wasmModule) return { is_valid: true, errors: [] };
-            try {
-                const result = validate_credentials_wasm(username, password);
-                return JSON.parse(result);
-            } catch (error) {
-                console.error('Credentials validation error:', error);
-                return { is_valid: true, errors: [] };
-            }
-        }
 
         // Error display functions
         function showFieldError(fieldId, errors) {
@@ -98,13 +65,16 @@
             const passwordField = document.getElementById('password_');
 
             usernameField.addEventListener('input', function () {
-                const result = validateUsername(this.value);
-                showFieldError('username_', result.errors);
+                console.log('username input', this.value);
+                console.log('wasmModule', wasmModule);
+                const result = wasmModule.validate_username_wasm(this.value);
+                console.log('username validation result', result);
+                showFieldError('username_', result);
             });
 
             passwordField.addEventListener('input', function () {
-                const result = validatePassword(this.value);
-                showFieldError('password_', result.errors);
+                const result = wasmModule.validate_password_wasm(this.value);
+                showFieldError('password_', result);
             });
         }
 
@@ -119,38 +89,38 @@
                 field.style.animation = '';
             }, 500);
         }
-        
-        window.try_signup = async function() {
+
+        window.try_signup = async function () {
             const element = document.getElementById("signup_form");
             const form_data = new FormData(element);
             const data = new URLSearchParams(form_data);
-            
+
             // If WASM module is loaded, do client-side validation
             if (wasmModule) {
                 const username = form_data.get('username');
                 const password = form_data.get('password');
-                
+
                 // Client-side validation
-                const validation = validateCredentials(username, password);
-                if (!validation.is_valid) {
-                    const usernameErrors = validation.errors.filter(e => e.includes('Username'));
-                    const passwordErrors = validation.errors.filter(e => e.includes('Password'));
-                    
-                    showFieldError('username_', usernameErrors);
-                    showFieldError('password_', passwordErrors);
-                    
-                    // Shake the fields that have errors
-                    if (usernameErrors.length > 0) {
-                        shakeField('username_');
-                    }
-                    if (passwordErrors.length > 0) {
-                        shakeField('password_');
-                    }
+                const password_validation = wasmModule.validate_password_wasm(password);
+                const username_validation = wasmModule.validate_username_wasm(username);
+                let any_errors = false;
+                if (username_validation.length != 0) {
+                    showFieldError('username_', username_validation);
+                    shakeField('username_');
+                    any_errors = true;
+                }
+
+                if (password_validation.length != 0) {
+                    showFieldError('password_', password_validation);
+                    shakeField('password_');
+                    any_errors = true;
+                }
+                if (any_errors) {
                     return;
                 }
             }
             // If WASM not loaded yet, just yeet it to the server (fallback behavior)
-            
+
             var response = await fetch("/signup", {
                 method: "POST",
                 body: data
@@ -181,11 +151,28 @@
             border-color: #44ff44 !important;
             background-color: #e6ffe6 !important;
         }
-        
+
         @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-            20%, 40%, 60%, 80% { transform: translateX(5px); }
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            10%,
+            30%,
+            50%,
+            70%,
+            90% {
+                transform: translateX(-5px);
+            }
+
+            20%,
+            40%,
+            60%,
+            80% {
+                transform: translateX(5px);
+            }
         }
     </style>
 </head>

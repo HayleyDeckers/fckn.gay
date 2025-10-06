@@ -63,10 +63,27 @@ async fn main() -> Result<()> {
         .merge(axum::Router::new().nest("/user", user_routes))
         // api routes, most will need a valid session or api key
         .merge(axum::Router::new().nest("/api", api_router))
+        // WASM files with correct MIME type
+        .merge(axum::Router::new().route(
+            "/fckn_gay_validation_bg.wasm",
+            axum::routing::get(|| async {
+                let wasm_data = std::fs::read("server/static/fckn_gay_validation_bg.wasm")
+                    .unwrap_or_else(|_| Vec::new());
+                Response::builder()
+                    .header("content-type", "application/wasm")
+                    .header("content-length", wasm_data.len())
+                    .body(Body::from(wasm_data))
+                    .unwrap()
+            }),
+        ))
         // static files, /, favicon, css etc
         .fallback_service(
             tower_http::services::ServeDir::new("server/static")
-                .append_index_html_on_directories(true),
+                .append_index_html_on_directories(true)
+                .precompressed_gzip()
+                .precompressed_br()
+                .precompressed_deflate()
+                .precompressed_zstd(),
         )
         // Add panic-catching middleware to all routes with our silly error messages
         .layer(CatchPanicLayer::custom(silly_panic_handler))

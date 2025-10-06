@@ -7,3 +7,15 @@ config.toml
 notes.md
 TODO.md
 *.db
+AGENTS.md
+
+# generated WASM files
+validation/pkg/
+server/static/fckn_gay_validation*.js
+server/static/fckn_gay_validation*.wasm
+
+user-database/implementors/diesel/.env
+user-database/implementors/diesel/diesel.toml
+.cursor/screenshots/
+record.log
+
