@@ -10,7 +10,7 @@
             const element = document.getElementById("signup_form");
             const form_data = new FormData(element);
             const data = new URLSearchParams(form_data);
-            var response = await fetch("/sign-up", {
+            var response = await fetch("/signup", {
                 method: "POST",
                 body: data
             });
