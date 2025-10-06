@@ -112,21 +112,28 @@
         document.addEventListener('DOMContentLoaded', setupValidation);
 
         async function try_signup() {
+            // Check if WASM module is loaded
+            if (!wasmModule) {
+                alert("Validation system is still loading. Please wait a moment and try again.");
+                return;
+            }
+            
             const element = document.getElementById("signup_form");
             const form_data = new FormData(element);
             const data = new URLSearchParams(form_data);
-
+            
             const username = form_data.get('username');
             const password = form_data.get('password');
-
+            
             // Client-side validation
             const validation = validateCredentials(username, password);
             if (!validation.is_valid) {
                 showFieldError('username_', validation.errors.filter(e => e.includes('Username')));
                 showFieldError('password_', validation.errors.filter(e => e.includes('Password')));
+                alert("Please fix the validation errors before submitting.");
                 return;
             }
-
+            
             var response = await fetch("/signup", {
                 method: "POST",
                 body: data
