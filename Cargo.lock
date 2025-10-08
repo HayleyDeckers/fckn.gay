@@ -706,6 +706,7 @@ dependencies = [
  "fckn-gay-dns",
  "fckn-gay-email",
  "fckn-gay-user-database",
+ "fckn-gay-validation",
  "getrandom 0.3.3",
  "serde",
  "tokio",
@@ -765,6 +766,14 @@ dependencies = [
  "password-auth",
  "serde",
  "uuid",
+]
+
+[[package]]
+name = "fckn-gay-validation"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]

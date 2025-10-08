@@ -3,13 +3,124 @@
 
 <head>
     <link rel="stylesheet" href="style.css">
-    <title>Login</title>
+    <title>Signup</title>
     <meta charset="utf-8" />
-    <script>
-        async function try_signup() {
+    <script type="module">
+        import init, { validate_username_wasm, validate_password_wasm } from './fckn_gay_validation.js';
+
+        let wasmModule = null;
+
+        // Initialize WASM module
+        async function initWasm() {
+            try {
+                console.log('Attempting to load WASM module...');
+                wasmModule = await init('./fckn_gay_validation_bg.wasm');
+                console.log('WASM validation module loaded successfully!');
+            } catch (error) {
+                console.error('Failed to load WASM module:', error);
+                console.error('Error details:', error.message);
+                console.error('Stack trace:', error.stack);
+            }
+        }
+
+        // Initialize on page load
+        initWasm();
+
+
+        // Error display functions
+        function showFieldError(fieldId, errors) {
+            const field = document.getElementById(fieldId);
+            const errorDiv = document.getElementById(fieldId + '_error');
+
+            if (errors.length > 0) {
+                field.style.borderColor = '#ff4444';
+                field.style.backgroundColor = '#ffe6e6';
+                if (errorDiv) {
+                    errorDiv.innerHTML = errors.join('<br>');
+                    errorDiv.style.display = 'block';
+                }
+            } else {
+                field.style.borderColor = '#44ff44';
+                field.style.backgroundColor = '#e6ffe6';
+                if (errorDiv) {
+                    errorDiv.style.display = 'none';
+                }
+            }
+        }
+
+        function clearFieldError(fieldId) {
+            const field = document.getElementById(fieldId);
+            const errorDiv = document.getElementById(fieldId + '_error');
+
+            field.style.borderColor = '';
+            field.style.backgroundColor = '';
+            if (errorDiv) {
+                errorDiv.style.display = 'none';
+            }
+        }
+
+        // Real-time validation
+        function setupValidation() {
+            const usernameField = document.getElementById('username_');
+            const passwordField = document.getElementById('password_');
+
+            usernameField.addEventListener('input', function () {
+                console.log('username input', this.value);
+                console.log('wasmModule', wasmModule);
+                const result = wasmModule.validate_username_wasm(this.value);
+                console.log('username validation result', result);
+                showFieldError('username_', result);
+            });
+
+            passwordField.addEventListener('input', function () {
+                const result = wasmModule.validate_password_wasm(this.value);
+                showFieldError('password_', result);
+            });
+        }
+
+        // Setup validation when DOM is ready
+        document.addEventListener('DOMContentLoaded', setupValidation);
+
+        // Shake animation for invalid fields
+        function shakeField(fieldId) {
+            const field = document.getElementById(fieldId);
+            field.style.animation = 'shake 0.5s ease-in-out';
+            setTimeout(() => {
+                field.style.animation = '';
+            }, 500);
+        }
+
+        window.try_signup = async function () {
             const element = document.getElementById("signup_form");
             const form_data = new FormData(element);
             const data = new URLSearchParams(form_data);
+
+            // If WASM module is loaded, do client-side validation
+            if (wasmModule) {
+                const username = form_data.get('username');
+                const password = form_data.get('password');
+
+                // Client-side validation
+                const password_validation = wasmModule.validate_password_wasm(password);
+                const username_validation = wasmModule.validate_username_wasm(username);
+                let any_errors = false;
+                if (username_validation.length != 0) {
+                    showFieldError('username_', username_validation);
+                    shakeField('username_');
+                    any_errors = true;
+                }
+
+                if (password_validation.length != 0) {
+                    showFieldError('password_', password_validation);
+                    shakeField('password_');
+                    any_errors = true;
+                }
+                if (any_errors) {
+                    return;
+                }
+            }
+            // If WASM not loaded yet, just yeet it to the server (fallback behavior)
+
             var response = await fetch("/signup", {
                 method: "POST",
                 body: data
@@ -23,18 +134,64 @@
             }
         }
     </script>
+    <style>
+        .error-message {
+            color: #ff4444;
+            font-size: 0.9em;
+            margin-top: 4px;
+            display: none;
+        }
+
+        input.error {
+            border-color: #ff4444 !important;
+            background-color: #ffe6e6 !important;
+        }
+
+        input.valid {
+            border-color: #44ff44 !important;
+            background-color: #e6ffe6 !important;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            10%,
+            30%,
+            50%,
+            70%,
+            90% {
+                transform: translateX(-5px);
+            }
+
+            20%,
+            40%,
+            60%,
+            80% {
+                transform: translateX(5px);
+            }
+        }
+    </style>
 </head>
 
 <body>
     <h1>signup</h1>
     <form id="signup_form" action="javascript:try_signup()" method="post">
-        <label for="fname">user:</label>
-        <input type="text" id="username_" name="username"><br><br>
-        <label for="lname">password:</label>
-        <input type="password" id="password_" name="password"><br><br>
-        <label for="lemail">email:</label>
+        <label for="username_">user:</label>
+        <input type="text" id="username_" name="username">
+        <div id="username__error" class="error-message"></div><br><br>
+
+        <label for="password_">password:</label>
+        <input type="password" id="password_" name="password">
+        <div id="password__error" class="error-message"></div><br><br>
+
+        <label for="email_">email:</label>
         <input type="email" id="email_" name="email"><br><br>
-        <input type="submit" , value="Sign Up">
+
+        <input type="submit" value="Sign Up">
     </form>
     already have an account? <a href="./index.html"> go to login</a>
 </body>

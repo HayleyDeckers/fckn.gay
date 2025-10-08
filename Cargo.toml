@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["dns", "email", "server", "user-database"]
+members = ["dns", "email", "server", "user-database", "validation"]
 
 [workspace.dependencies]
 #the core interfaces that are used by the server
@@ -9,6 +9,7 @@ members = ["dns", "email", "server", "user-database"]
 fckn-gay-dns = { path = "dns" }
 fckn-gay-email = { path = "email" }
 fckn-gay-user-database = { path = "user-database" }
+fckn-gay-validation = { path = "validation" }
 
 #all other dependencies
 anyhow = { version = "1" }
@@ -33,3 +34,8 @@ uuid = { version = "1.18.1", features = ["serde", "v4"] }
 [workspace.lints.clippy]
 # allow for now because signatures might change  
 new_without_default = "allow"
+
+# For WASM builds
+[profile.release]
+lto = true
+opt-level = "s"
