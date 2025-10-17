@@ -21,10 +21,10 @@ email.provider = "dummy"         # will simply print emails to stdout
 # New records are simply added to an in-memory hashmap. Changes are not persisted to disk.
 [dns.dummy]
 entries = [
-    { name = "hayley.is.fckn.gay", record_type = "A", content = "127.0.0.1", ttl_seconds = 3600 },
-    { name = "hayley.is.fckn.gay", record_type = "MX", content = "mail.fckn.gay", ttl_seconds = 3600 },
-    # the username for this entry would be test
-    { name = "this.test.is.fckn.gay", record_type = "A", content = "1.2.3.4", ttl_seconds = 3600 },
+  { name = "hayley.is.fckn.gay", record_type = "A", content = "127.0.0.1", ttl_seconds = 3600 },
+  { name = "hayley.is.fckn.gay", record_type = "MX", content = "mail.fckn.gay", ttl_seconds = 3600 },
+  # the username for this entry would be test
+  { name = "this.test.is.fckn.gay", record_type = "A", content = "1.2.3.4", ttl_seconds = 3600 },
 ]
 
 # the hickory provider spins up a full DNS server as part of the binary.
