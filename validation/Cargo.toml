@@ -2,6 +2,7 @@
 name = "fckn-gay-validation"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [target.wasm32.dependencies]
 js-sys = "0.3"
