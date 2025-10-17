@@ -16,10 +16,10 @@ use crate::{
     interfaces::PublicSuffix,
 };
 
-/// A DNS record with optional ID for frontend operations
+/// A DNS record with key for frontend operations
 #[derive(serde::Serialize)]
-pub struct RecordWithId {
-    pub id: serde_json::Value, // ID for deletion (null for providers that don't support UUID deletion)
+pub struct RecordWithKey {
+    pub key: fckn_gay_dns::Key, // Key for deletion
     pub record: DnsRecord,
 }
 
@@ -28,16 +28,14 @@ async fn get_records(
     State(dns): State<Arc<Mutex<Dns>>>,
     State(suffix): State<PublicSuffix>,
     authenticed_for: AuthenticatedFor,
-) -> Result<axum::Json<Vec<RecordWithId>>, AppError> {
+) -> Result<axum::Json<Vec<RecordWithKey>>, AppError> {
     let records = dns.lock().await.list_records().await?;
     let pat = format!(".{}{}", authenticed_for.user_id(), suffix);
     let filtered_records = records
         .into_iter()
         .filter_map(|(key, record)| {
             if record.name.ends_with(&pat) || record.name == pat[1..] {
-                // Serialize the key directly - () will become null, strings will be strings
-                let id = serde_json::to_value(&key).unwrap_or_default();
-                Some(RecordWithId { id, record })
+                Some(RecordWithKey { key, record })
             } else {
                 None
             }
@@ -62,15 +60,16 @@ async fn add_record(
     Ok(StatusCode::CREATED)
 }
 
-/// Delete a DNS record by ID (UUID-based deletion)
-async fn delete_record_by_id(
+/// Delete a DNS record by key (UUID-based deletion)
+async fn delete_record_by_key(
     State(dns): State<Arc<Mutex<Dns>>>,
     State(suffix): State<PublicSuffix>,
     authenticed_for: AuthenticatedFor,
-    Path(id_str): Path<String>,
+    Path(key_str): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    let id =
-        serde_json::from_str(&id_str).map_err(|e| anyhow::anyhow!("Invalid ID format: {}", e))?;
+    let key: fckn_gay_dns::Key =
+        serde_json::from_str(&key_str).map_err(|e| anyhow::anyhow!("Invalid key format: {}", e))?;
+
     // Verify the record exists and is owned by the user
     let records = dns.lock().await.list_records().await?;
     let pat = format!(".{}{}", authenticed_for.user_id(), suffix);
@@ -85,19 +84,13 @@ async fn delete_record_by_id(
         })
         .collect();
 
-    // Check if any user record has this ID by converting keys to serde_json::Value
-    let has_id = user_records.iter().any(|k| {
-        let key_value = serde_json::to_value(k).unwrap_or_default();
-        key_value == id
-    });
+    // Check if any user record has this key
+    let has_key = user_records.iter().any(|k| **k == key);
 
-    if !has_id {
+    if !has_key {
         return Err(anyhow::anyhow!("Record not found or not owned by user").into());
     }
 
-    // Convert serde_json::Value back to the appropriate Key type
-    let key: fckn_gay_dns::Key =
-        serde_json::from_value(id).map_err(|e| anyhow::anyhow!("Invalid key format: {}", e))?;
     dns.lock().await.delete_record_by_uuid(key).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -145,7 +138,7 @@ pub fn router(appstate: crate::Interfaces) -> Router<crate::Interfaces> {
     Router::new()
         .route("/records", get(get_records))
         .route("/add_record", post(add_record))
-        .route("/delete_record_by_id/:id", delete(delete_record_by_id))
+        .route("/delete_record_by_key/:key", delete(delete_record_by_key))
         .route("/delete_record", delete(delete_record_by_match))
         .layer(from_fn_with_state(
             appstate.auth_cache.clone(),

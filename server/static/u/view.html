@@ -46,11 +46,11 @@
                 cell2.innerHTML = records[i].record.record_type;
                 cell3.innerHTML = records[i].record.content;
 
-                // Add delete and edit buttons - use ID-based deletion if ID is not null, otherwise use record matching
-                if (records[i].id !== null) {
+                // Add delete and edit buttons - use key-based deletion if key is not null, otherwise use record matching
+                if (records[i].key !== null) {
                     cell4.innerHTML = `
-                        <button onclick="editRecordById('${records[i].id}', '${records[i].record.name}', '${records[i].record.record_type}', '${records[i].record.content}', ${records[i].record.ttl_seconds}, ${records[i].record.priority || 'null'})" class="edit-btn">✏️</button>
-                        <button onclick="deleteRecordById('${records[i].id}')" class="delete-btn">🗑️</button>
+                        <button onclick="editRecordByKey('${JSON.stringify(records[i].key)}', '${records[i].record.name}', '${records[i].record.record_type}', '${records[i].record.content}', ${records[i].record.ttl_seconds}, ${records[i].record.priority || 'null'})" class="edit-btn">✏️</button>
+                        <button onclick="deleteRecordByKey('${JSON.stringify(records[i].key)}')" class="delete-btn">🗑️</button>
                     `;
                 } else {
                     cell4.innerHTML = `
@@ -121,13 +121,13 @@
             container.innerHTML = '';
         }
 
-        async function deleteRecordById(id) {
+        async function deleteRecordByKey(key) {
             if (!confirm('Are you sure you want to delete this record? This action cannot be undone.')) {
                 return;
             }
 
             try {
-                const response = await fetch(`/api/dns/delete_record_by_id/${encodeURIComponent(id)}`, {
+                const response = await fetch(`/api/dns/delete_record_by_key/${encodeURIComponent(key)}`, {
                     method: 'DELETE'
                 });
 
@@ -173,7 +173,7 @@
             }
         }
 
-        function editRecordById(id, name, type, content, ttl, priority) {
+        function editRecordByKey(key, name, type, content, ttl, priority) {
             const container = document.getElementById('add-record-form-container');
             container.innerHTML = `
             <form id="edit-record-form" class="silly rainbow-border" style="margin:1em 0;">
@@ -202,8 +202,8 @@
         `;
             container.style.display = '';
 
-            // Store the ID for the update operation
-            document.getElementById('edit-record-form').dataset.recordId = id;
+            // Store the key for the update operation
+            document.getElementById('edit-record-form').dataset.recordKey = key;
 
             document.getElementById('edit-record-form').onsubmit = async function (e) {
                 e.preventDefault();
@@ -216,8 +216,8 @@
                 if (data.priority) { data.priority = parseInt(data.priority) } else { data.priority = null };
 
                 try {
-                    // Delete the old record first using ID
-                    const deleteRes = await fetch(`/api/dns/delete_record_by_id/${encodeURIComponent(id)}`, {
+                    // Delete the old record first using key
+                    const deleteRes = await fetch(`/api/dns/delete_record_by_key/${encodeURIComponent(key)}`, {
                         method: 'DELETE'
                     });
 
