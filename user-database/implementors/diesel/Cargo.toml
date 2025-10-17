@@ -16,4 +16,4 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 
 #forces bundled sqlite to be used, making it easier to build everywhere
-libsqlite3-sys = { version = "0.33", features = ["bundled"] }
+libsqlite3-sys = { version = "0.35", features = ["bundled"] }
