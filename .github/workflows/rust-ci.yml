@@ -16,7 +16,7 @@ jobs:
       matrix:
         include:
           - job: rustfmt
-            toolchain: stable
+            toolchain: nightly
             timeout: 10
             command: cargo fmt --all -- --check
           - job: clippy
@@ -64,6 +64,8 @@ jobs:
       - name: Install Rust (nightly)
         if: matrix.toolchain == 'nightly'
         uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:

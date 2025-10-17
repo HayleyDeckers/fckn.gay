@@ -88,11 +88,9 @@ impl Interface for Database {
         } = config;
         if let Some(provider) = provider {
             match provider {
-                Providers::Dummy => {
-                    DummyDatabase::new(dummy.ok_or(Error::MissingConfig("Dummy"))?)
-                        .map_err(Error::Dummy)
-                        .map(Database::Dummy)
-                }
+                Providers::Dummy => DummyDatabase::new(dummy.ok_or(Error::MissingConfig("Dummy"))?)
+                    .map_err(Error::Dummy)
+                    .map(Database::Dummy),
                 Providers::Csv => CsvDatabase::new(csv.ok_or(Error::MissingConfig("Csv"))?)
                     .map_err(Error::Csv)
                     .map(Database::Csv),
