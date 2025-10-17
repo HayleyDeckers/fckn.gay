@@ -18,6 +18,12 @@ use tokio::{
     sync::Mutex,
 };
 
+/// A serializable wrapper for Hickory RrKey
+// Hickory doesn't need a complex key since it uses record matching for deletion
+pub type HickoryKey = ();
+
+// No From implementations needed since HickoryKey is just ()
+
 /// configuration for the Porkbun DNS provider.
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -141,7 +147,7 @@ fn record_from_hickory_record(r: &HickoryRecord) -> Record {
 impl Dns for HickoryDns {
     type Config = Config;
     type Error = ProtoError;
-    type Key = RrKey; //not unique! needs another idx
+    type Key = HickoryKey;
 
     fn new(config: Self::Config) -> Result<Self, Self::Error>
     where
@@ -208,11 +214,11 @@ impl Dns for HickoryDns {
         } else {
             format!("{}.", record.name)
         })?;
-        let key = RrKey::new(
+        let rr_key = RrKey::new(
             name.clone().into(),
             record_type_to_hickory(record.record_type),
         );
-        println!("adding record: {key:?}");
+        println!("adding record: {rr_key:?}");
         let hickory_record = hickory_record_from_record(record);
         let mut file = self.server_file.lock().await;
         if !self.authority.upsert(hickory_record, 0).await {
@@ -231,12 +237,34 @@ impl Dns for HickoryDns {
         println!("new content:\n{new_content}");
         file.write_all(new_content.as_bytes()).await.unwrap();
         file.flush().await.unwrap();
-        Ok(key)
+
+        // Hickory doesn't need to track keys since it uses record matching for deletion
+        Ok(())
     }
 
-    async fn delete_record(&self, key: Self::Key) -> Result<(), Self::Error> {
-        self.authority.records_mut().await.remove(&key);
-        //todo: ok_or
+    /// Deletes a DNS record using its key (not supported for Hickory)
+    async fn delete_record_by_uuid(&self, _key: Self::Key) -> Result<(), Self::Error> {
+        Err(ProtoError::from(
+            "UUID deletion not supported for Hickory DNS provider",
+        ))
+    }
+
+    /// Deletes DNS records by matching the full record
+    async fn delete_record_by_match(&self, record: Record) -> Result<(), Self::Error> {
+        // Convert our record to Hickory format and find matching records
+        let name = Name::from_utf8(if record.name.ends_with('.') {
+            record.name.clone()
+        } else {
+            format!("{}.", record.name)
+        })?;
+
+        let rr_key = RrKey::new(
+            name.clone().into(),
+            record_type_to_hickory(record.record_type),
+        );
+
+        // Remove all records with this key (Hickory stores sets per key)
+        self.authority.records_mut().await.remove(&rr_key);
         Ok(())
     }
 
@@ -246,10 +274,10 @@ impl Dns for HickoryDns {
             .records()
             .await
             .iter()
-            .flat_map(|(key, r)| r.records_without_rrsigs().zip(std::iter::repeat(key)))
-            .map(|(r, key)| {
+            .flat_map(|(_, r)| r.records_without_rrsigs())
+            .map(|r| {
                 let record = record_from_hickory_record(r);
-                (key.clone(), record)
+                ((), record) // Hickory uses () as key since it uses record matching
             })
             .collect::<Vec<_>>())
     }

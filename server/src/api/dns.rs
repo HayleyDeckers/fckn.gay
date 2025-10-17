@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    extract::{Json as AxumJson, State},
+    extract::{Json as AxumJson, Path, State},
     http::StatusCode,
     middleware::from_fn_with_state,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use fckn_gay_dns::{Dns, Interface as DnsInterface, Record as DnsRecord};
 use tokio::sync::Mutex;
@@ -16,19 +16,28 @@ use crate::{
     interfaces::PublicSuffix,
 };
 
+/// A DNS record with optional ID for frontend operations
+#[derive(serde::Serialize)]
+pub struct RecordWithId {
+    pub id: serde_json::Value, // ID for deletion (null for providers that don't support UUID deletion)
+    pub record: DnsRecord,
+}
+
 /// Get DNS records for the authenticated user
 async fn get_records(
     State(dns): State<Arc<Mutex<Dns>>>,
     State(suffix): State<PublicSuffix>,
     authenticed_for: AuthenticatedFor,
-) -> Result<axum::Json<Vec<DnsRecord>>, AppError> {
+) -> Result<axum::Json<Vec<RecordWithId>>, AppError> {
     let records = dns.lock().await.list_records().await?;
     let pat = format!(".{}{}", authenticed_for.user_id(), suffix);
     let filtered_records = records
         .into_iter()
-        .filter_map(|(_, record)| {
+        .filter_map(|(key, record)| {
             if record.name.ends_with(&pat) || record.name == pat[1..] {
-                Some(record)
+                // Serialize the key directly - () will become null, strings will be strings
+                let id = serde_json::to_value(&key).unwrap_or_default();
+                Some(RecordWithId { id, record })
             } else {
                 None
             }
@@ -53,11 +62,91 @@ async fn add_record(
     Ok(StatusCode::CREATED)
 }
 
+/// Delete a DNS record by ID (UUID-based deletion)
+async fn delete_record_by_id(
+    State(dns): State<Arc<Mutex<Dns>>>,
+    State(suffix): State<PublicSuffix>,
+    authenticed_for: AuthenticatedFor,
+    Path(id_str): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let id =
+        serde_json::from_str(&id_str).map_err(|e| anyhow::anyhow!("Invalid ID format: {}", e))?;
+    // Verify the record exists and is owned by the user
+    let records = dns.lock().await.list_records().await?;
+    let pat = format!(".{}{}", authenticed_for.user_id(), suffix);
+    let user_records: Vec<_> = records
+        .iter()
+        .filter_map(|(k, record)| {
+            if record.name.ends_with(&pat) || record.name == pat[1..] {
+                Some(k)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Check if any user record has this ID by converting keys to serde_json::Value
+    let has_id = user_records.iter().any(|k| {
+        let key_value = serde_json::to_value(k).unwrap_or_default();
+        key_value == id
+    });
+
+    if !has_id {
+        return Err(anyhow::anyhow!("Record not found or not owned by user").into());
+    }
+
+    // Convert serde_json::Value back to the appropriate Key type
+    let key: fckn_gay_dns::Key =
+        serde_json::from_value(id).map_err(|e| anyhow::anyhow!("Invalid key format: {}", e))?;
+    dns.lock().await.delete_record_by_uuid(key).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Delete a DNS record by full record matching
+async fn delete_record_by_match(
+    State(dns): State<Arc<Mutex<Dns>>>,
+    State(suffix): State<PublicSuffix>,
+    authenticed_for: AuthenticatedFor,
+    AxumJson(record): AxumJson<DnsRecord>,
+) -> Result<StatusCode, AppError> {
+    // Verify the record exists and is owned by the user
+    let records = dns.lock().await.list_records().await?;
+    let pat = format!(".{}{}", authenticed_for.user_id(), suffix);
+    let user_records: Vec<_> = records
+        .iter()
+        .filter_map(|(_, r)| {
+            if r.name.ends_with(&pat) || r.name == pat[1..] {
+                Some(r)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Check if the record exists in user's records
+    let record_exists = user_records.iter().any(|r| {
+        r.name == record.name
+            && r.record_type == record.record_type
+            && r.content == record.content
+            && r.ttl_seconds == record.ttl_seconds
+            && r.priority == record.priority
+    });
+
+    if !record_exists {
+        return Err(anyhow::anyhow!("Record not found or not owned by user").into());
+    }
+
+    dns.lock().await.delete_record_by_match(record).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// DNS API router with authentication middleware
 pub fn router(appstate: crate::Interfaces) -> Router<crate::Interfaces> {
     Router::new()
         .route("/records", get(get_records))
         .route("/add_record", post(add_record))
+        .route("/delete_record_by_id/:id", delete(delete_record_by_id))
+        .route("/delete_record", delete(delete_record_by_match))
         .layer(from_fn_with_state(
             appstate.auth_cache.clone(),
             add_authorization_or_unauthorized,

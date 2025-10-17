@@ -618,10 +618,12 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 name = "fckn-gay-dns"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "fckn-gay-dns-dummy",
  "fckn-gay-dns-hickory",
  "fckn-gay-dns-interface",
  "fckn-gay-dns-porkbun",
+ "hickory-server",
  "serde",
 ]
 
@@ -709,6 +711,7 @@ dependencies = [
  "fckn-gay-validation",
  "getrandom 0.3.3",
  "serde",
+ "serde_json",
  "tokio",
  "toml",
  "tower-http",

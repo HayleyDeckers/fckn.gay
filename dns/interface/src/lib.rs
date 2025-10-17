@@ -152,7 +152,7 @@ impl FromStr for Record {
 pub trait Dns {
     type Config: serde::de::DeserializeOwned;
     type Error: std::error::Error + Send + Sync + 'static;
-    type Key;
+    type Key: serde::Serialize + serde::de::DeserializeOwned;
 
     /// Creates a new instance of the DNS provider with the given configuration.
     fn new(config: Self::Config) -> Result<Self, Self::Error>
@@ -170,17 +170,33 @@ pub trait Dns {
     /// A result indicating success or failure.
     fn add_record(&self, record: Record) -> impl Future<Output = Result<Self::Key, Self::Error>>;
 
-    /// Deletes a DNS record from the provider.
+    /// Deletes a DNS record from the provider using its key.
     ///
     /// # Arguments
     ///
-    /// * `name` - The name of the DNS record to delete.
-    /// * `record_type` - The type of the DNS record to delete.
+    /// * `key` - The key of the DNS record to delete.
     ///
     /// # Returns
     ///
     /// A result indicating success or failure.
-    fn delete_record(&self, key: Self::Key) -> impl Future<Output = Result<(), Self::Error>>;
+    fn delete_record_by_uuid(
+        &self,
+        key: Self::Key,
+    ) -> impl Future<Output = Result<(), Self::Error>>;
+
+    /// Deletes DNS records from the provider by matching the full record.
+    ///
+    /// # Arguments
+    ///
+    /// * `record` - The full record to match and delete.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
+    fn delete_record_by_match(
+        &self,
+        record: Record,
+    ) -> impl Future<Output = Result<(), Self::Error>>;
 
     /// Lists all DNS records for a domain.
     ///

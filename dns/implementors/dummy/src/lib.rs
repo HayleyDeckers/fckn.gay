@@ -50,12 +50,28 @@ impl Dns for DummyDns {
         Ok(entries.len() - 1)
     }
 
-    /// Deletes a DNS record from the provider.
-    async fn delete_record(&self, key: Self::Key) -> Result<(), Self::Error> {
+    /// Deletes a DNS record using its key
+    async fn delete_record_by_uuid(&self, key: Self::Key) -> Result<(), Self::Error> {
         let mut entries = self.entries.lock().await;
         //todo: error if key is out of bounds
         if let Some(r) = entries.get_mut(key) {
             *r = None;
+        }
+        Ok(())
+    }
+
+    /// Deletes DNS records by matching the full record
+    async fn delete_record_by_match(&self, record: Record) -> Result<(), Self::Error> {
+        let mut entries = self.entries.lock().await;
+        for entry in entries.iter_mut() {
+            if let Some(existing) = entry
+                && existing.name == record.name
+                && existing.record_type == record.record_type
+                && existing.content == record.content
+            {
+                *entry = None;
+                break;
+            }
         }
         Ok(())
     }

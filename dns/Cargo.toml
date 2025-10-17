@@ -8,8 +8,10 @@ publish = false
 workspace = true
 
 [dependencies]
+anyhow.workspace = true
 fckn-gay-dns-dummy = { path = "./implementors/dummy" }
 fckn-gay-dns-hickory = { path = "./implementors/hickory" }
 fckn-gay-dns-interface = { path = "./interface" }
 fckn-gay-dns-porkbun = { path = "./implementors/porkbun" }
+hickory-server.workspace = true
 serde.workspace = true

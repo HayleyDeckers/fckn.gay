@@ -71,6 +71,8 @@ impl std::error::Error for Error {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Key {
     Porkbun(<Porkbun as Interface>::Key),
     Dummy(<Dummy as Interface>::Key),
@@ -139,21 +141,42 @@ impl Interface for Dns {
         }
     }
 
-    async fn delete_record(&self, key: Self::Key) -> Result<(), Self::Error> {
+    async fn delete_record_by_uuid(&self, key: Self::Key) -> Result<(), Self::Error> {
         match (self, key) {
             (Dns::Porkbun(porkbun), Key::Porkbun(porkbun_key)) => porkbun
-                .delete_record(porkbun_key)
+                .delete_record_by_uuid(porkbun_key)
                 .await
                 .map_err(Error::Porkbun),
+            (Dns::Dummy(dummy), Key::Dummy(dummy_key)) => dummy
+                .delete_record_by_uuid(dummy_key)
+                .await
+                .map_err(Error::Dummy),
             (Dns::Hickory(hickory), Key::Hickory(hickory_key)) => hickory
-                .delete_record(hickory_key)
+                .delete_record_by_uuid(hickory_key)
                 .await
                 .map_err(Error::Hickory),
-            (Dns::Dummy(dummy), Key::Dummy(dummy_key)) => {
-                dummy.delete_record(dummy_key).await.map_err(Error::Dummy)
-            }
             #[allow(unreachable_patterns)]
             _ => panic!("Invalid key type for DNS provider"),
+        }
+    }
+
+    async fn delete_record_by_match(
+        &self,
+        record: fckn_gay_dns_interface::Record,
+    ) -> Result<(), Self::Error> {
+        match self {
+            Dns::Porkbun(porkbun) => porkbun
+                .delete_record_by_match(record)
+                .await
+                .map_err(Error::Porkbun),
+            Dns::Dummy(dummy) => dummy
+                .delete_record_by_match(record)
+                .await
+                .map_err(Error::Dummy),
+            Dns::Hickory(hickory) => hickory
+                .delete_record_by_match(record)
+                .await
+                .map_err(Error::Hickory),
         }
     }
 

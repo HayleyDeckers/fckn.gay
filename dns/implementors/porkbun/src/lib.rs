@@ -127,12 +127,19 @@ impl Dns for PorkbunDns {
         Ok(response)
     }
 
-    /// Deletes a DNS record from the provider.
-    async fn delete_record(&self, key: Self::Key) -> Result<(), Self::Error> {
+    /// Deletes a DNS record using its key (Porkbun's string ID)
+    async fn delete_record_by_uuid(&self, key: Self::Key) -> Result<(), Self::Error> {
         self.client
             .delete(&self.domain, &key)
             .await
             .map_err(Error::from)
+    }
+
+    /// Deletes DNS records by matching the full record (not supported for Porkbun)
+    async fn delete_record_by_match(&self, _record: Record) -> Result<(), Self::Error> {
+        Err(Error::Other(
+            "Record matching deletion not supported for Porkbun DNS provider".to_string(),
+        ))
     }
 
     /// Lists all DNS records for a domain.

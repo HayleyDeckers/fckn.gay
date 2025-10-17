@@ -28,11 +28,11 @@
             }
 
 
-            table.innerHTML = "<tr><th>record</th><th>type</th><th>content</th></tr>";
+            table.innerHTML = "<tr><th>record</th><th>type</th><th>content</th><th>actions</th></tr>";
             if (records.length === 0) {
                 var emptyRow = table.appendChild(document.createElement("tr"));
                 var emptyCell = emptyRow.appendChild(document.createElement("td"));
-                emptyCell.colSpan = 3;
+                emptyCell.colSpan = 4;
                 emptyCell.style.textAlign = "center";
                 emptyCell.innerHTML = "No records found.";
             }
@@ -41,14 +41,28 @@
                 var cell1 = row.appendChild(document.createElement("td"));
                 var cell2 = row.appendChild(document.createElement("td"));
                 var cell3 = row.appendChild(document.createElement("td"));
-                cell1.innerHTML = records[i].name;
-                cell2.innerHTML = records[i].record_type;
-                cell3.innerHTML = records[i].content;
+                var cell4 = row.appendChild(document.createElement("td"));
+                cell1.innerHTML = records[i].record.name;
+                cell2.innerHTML = records[i].record.record_type;
+                cell3.innerHTML = records[i].record.content;
+
+                // Add delete and edit buttons - use ID-based deletion if ID is not null, otherwise use record matching
+                if (records[i].id !== null) {
+                    cell4.innerHTML = `
+                        <button onclick="editRecordById('${records[i].id}', '${records[i].record.name}', '${records[i].record.record_type}', '${records[i].record.content}', ${records[i].record.ttl_seconds}, ${records[i].record.priority || 'null'})" class="edit-btn">✏️</button>
+                        <button onclick="deleteRecordById('${records[i].id}')" class="delete-btn">🗑️</button>
+                    `;
+                } else {
+                    cell4.innerHTML = `
+                        <button onclick="editRecordByMatch('${records[i].record.name}', '${records[i].record.record_type}', '${records[i].record.content}', ${records[i].record.ttl_seconds}, ${records[i].record.priority || 'null'});" class="edit-btn">✏️</button>
+                        <button onclick="deleteRecordByMatch('${records[i].record.name}', '${records[i].record.record_type}', '${records[i].record.content}', ${records[i].record.ttl_seconds}, ${records[i].record.priority || 'null'});" class="delete-btn">🗑️</button>
+                    `;
+                }
             }
             // Add cute + button row
             var addRow = table.appendChild(document.createElement("tr"));
             var addCell = addRow.appendChild(document.createElement("td"));
-            addCell.colSpan = 3;
+            addCell.colSpan = 4;
             addCell.style.textAlign = "center";
             addCell.innerHTML = `<button id='add-record-btn' class='cute-plus' title='Add DNS Record' onclick='showAddRecordForm()'>➕</button>`;
         }
@@ -106,6 +120,211 @@
             container.style.display = 'none';
             container.innerHTML = '';
         }
+
+        async function deleteRecordById(id) {
+            if (!confirm('Are you sure you want to delete this record? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/dns/delete_record_by_id/${encodeURIComponent(id)}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    // Refresh the table
+                    populate();
+                } else {
+                    alert('Failed to delete record: ' + await response.text());
+                }
+            } catch (error) {
+                alert('Error deleting record: ' + error.message);
+            }
+        }
+
+        async function deleteRecordByMatch(name, type, content, ttl, priority) {
+            if (!confirm('Are you sure you want to delete this record? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const record = {
+                    name: name,
+                    record_type: type,
+                    content: content,
+                    ttl_seconds: ttl,
+                    priority: priority === 'null' ? null : priority
+                };
+
+                const response = await fetch('/api/dns/delete_record', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(record)
+                });
+
+                if (response.ok) {
+                    // Refresh the table
+                    populate();
+                } else {
+                    alert('Failed to delete record: ' + await response.text());
+                }
+            } catch (error) {
+                alert('Error deleting record: ' + error.message);
+            }
+        }
+
+        function editRecordById(id, name, type, content, ttl, priority) {
+            const container = document.getElementById('add-record-form-container');
+            container.innerHTML = `
+            <form id="edit-record-form" class="silly rainbow-border" style="margin:1em 0;">
+                <h3>Edit Record</h3>
+                <label>Name: <input type="text" name="name" value="${name}" required></label><br>
+                <label>Type: <select name="record_type">
+                    <option value="A" ${type === 'A' ? 'selected' : ''}>A</option>
+                    <option value="AAAA" ${type === 'AAAA' ? 'selected' : ''}>AAAA</option>
+                    <option value="CNAME" ${type === 'CNAME' ? 'selected' : ''}>CNAME</option>
+                    <option value="MX" ${type === 'MX' ? 'selected' : ''}>MX</option>
+                    <option value="TXT" ${type === 'TXT' ? 'selected' : ''}>TXT</option>
+                    <option value="NS" ${type === 'NS' ? 'selected' : ''}>NS</option>
+                    <option value="ALIAS" ${type === 'ALIAS' ? 'selected' : ''}>ALIAS</option>
+                    <option value="SRV" ${type === 'SRV' ? 'selected' : ''}>SRV</option>
+                    <option value="TLSA" ${type === 'TLSA' ? 'selected' : ''}>TLSA</option>
+                    <option value="CAA" ${type === 'CAA' ? 'selected' : ''}>CAA</option>
+                    <option value="HTTPS" ${type === 'HTTPS' ? 'selected' : ''}>HTTPS</option>
+                    <option value="SVCB" ${type === 'SVCB' ? 'selected' : ''}>SVCB</option>
+                </select></label><br>
+                <label>Content: <input type="text" name="content" value="${content}" required></label><br>
+                <label>TTL (seconds): <input type="number" name="ttl_seconds" value="${ttl}"></label><br>
+                <label>Priority: <input type="number" name="priority" value="${priority || ''}"></label><br>
+                <input type="submit" value="Update Record">
+                <button type="button" onclick="hideAddRecordForm()">Cancel</button>
+            </form>
+        `;
+            container.style.display = '';
+
+            // Store the ID for the update operation
+            document.getElementById('edit-record-form').dataset.recordId = id;
+
+            document.getElementById('edit-record-form').onsubmit = async function (e) {
+                e.preventDefault();
+                const form = e.target;
+                const data = Object.fromEntries(new FormData(form));
+
+                // Convert record_type to enum
+                data.record_type = data.record_type;
+                if (data.ttl_seconds) { data.ttl_seconds = parseInt(data.ttl_seconds) } else { data.ttl_seconds = null };
+                if (data.priority) { data.priority = parseInt(data.priority) } else { data.priority = null };
+
+                try {
+                    // Delete the old record first using ID
+                    const deleteRes = await fetch(`/api/dns/delete_record_by_id/${encodeURIComponent(id)}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (!deleteRes.ok) {
+                        alert('Failed to delete old record: ' + await deleteRes.text());
+                        return;
+                    }
+
+                    // Add the new record
+                    const addRes = await fetch('/api/dns/add_record', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+
+                    if (addRes.ok) {
+                        hideAddRecordForm();
+                        populate();
+                    } else {
+                        alert('Failed to update record: ' + await addRes.text());
+                    }
+                } catch (error) {
+                    alert('Error updating record: ' + error.message);
+                }
+            };
+        }
+
+        function editRecordByMatch(name, type, content, ttl, priority) {
+            const container = document.getElementById('add-record-form-container');
+            container.innerHTML = `
+            <form id="edit-record-form" class="silly rainbow-border" style="margin:1em 0;">
+                <h3>Edit Record</h3>
+                <label>Name: <input type="text" name="name" value="${name}" required></label><br>
+                <label>Type: <select name="record_type">
+                    <option value="A" ${type === 'A' ? 'selected' : ''}>A</option>
+                    <option value="AAAA" ${type === 'AAAA' ? 'selected' : ''}>AAAA</option>
+                    <option value="CNAME" ${type === 'CNAME' ? 'selected' : ''}>CNAME</option>
+                    <option value="MX" ${type === 'MX' ? 'selected' : ''}>MX</option>
+                    <option value="TXT" ${type === 'TXT' ? 'selected' : ''}>TXT</option>
+                    <option value="NS" ${type === 'NS' ? 'selected' : ''}>NS</option>
+                    <option value="ALIAS" ${type === 'ALIAS' ? 'selected' : ''}>ALIAS</option>
+                    <option value="SRV" ${type === 'SRV' ? 'selected' : ''}>SRV</option>
+                    <option value="TLSA" ${type === 'TLSA' ? 'selected' : ''}>TLSA</option>
+                    <option value="CAA" ${type === 'CAA' ? 'selected' : ''}>CAA</option>
+                    <option value="HTTPS" ${type === 'HTTPS' ? 'selected' : ''}>HTTPS</option>
+                    <option value="SVCB" ${type === 'SVCB' ? 'selected' : ''}>SVCB</option>
+                </select></label><br>
+                <label>Content: <input type="text" name="content" value="${content}" required></label><br>
+                <label>TTL (seconds): <input type="number" name="ttl_seconds" value="${ttl}"></label><br>
+                <label>Priority: <input type="number" name="priority" value="${priority || ''}"></label><br>
+                <input type="submit" value="Update Record">
+                <button type="button" onclick="hideAddRecordForm()">Cancel</button>
+            </form>
+        `;
+            container.style.display = '';
+
+            // Store the original record for deletion
+            document.getElementById('edit-record-form').dataset.originalRecord = JSON.stringify({
+                name: name,
+                record_type: type,
+                content: content,
+                ttl_seconds: ttl,
+                priority: priority === 'null' ? null : priority
+            });
+
+            document.getElementById('edit-record-form').onsubmit = async function (e) {
+                e.preventDefault();
+                const form = e.target;
+                const data = Object.fromEntries(new FormData(form));
+
+                // Convert record_type to enum
+                data.record_type = data.record_type;
+                if (data.ttl_seconds) { data.ttl_seconds = parseInt(data.ttl_seconds) } else { data.ttl_seconds = null };
+                if (data.priority) { data.priority = parseInt(data.priority) } else { data.priority = null };
+
+                try {
+                    // Delete the old record first using record matching
+                    const originalRecord = JSON.parse(form.dataset.originalRecord);
+                    const deleteRes = await fetch('/api/dns/delete_record', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(originalRecord)
+                    });
+
+                    if (!deleteRes.ok) {
+                        alert('Failed to delete old record: ' + await deleteRes.text());
+                        return;
+                    }
+
+                    // Add the new record
+                    const addRes = await fetch('/api/dns/add_record', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+
+                    if (addRes.ok) {
+                        hideAddRecordForm();
+                        populate();
+                    } else {
+                        alert('Failed to update record: ' + await addRes.text());
+                    }
+                } catch (error) {
+                    alert('Error updating record: ' + error.message);
+                }
+            };
+        }
     </script>
 
 </head>
@@ -161,6 +380,35 @@
         100% {
             transform: rotate(360deg);
         }
+    }
+
+    .edit-btn,
+    .delete-btn {
+        font-size: 1.2em;
+        background: linear-gradient(90deg, #ffe7c7 0%, #e0ffe7 100%);
+        color: #ff90b3;
+        border: 2px solid #c7eaff;
+        border-radius: 50%;
+        width: 2em;
+        height: 2em;
+        box-shadow: 0 2px 8px #e0d6ff44;
+        cursor: pointer;
+        margin: 0 0.2em;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s, transform 0.2s;
+        vertical-align: middle;
+    }
+
+    .edit-btn:hover {
+        background: linear-gradient(90deg, #e0ffe7 0%, #ffe7c7 100%);
+        transform: scale(1.15) rotate(-5deg);
+    }
+
+    .delete-btn:hover {
+        background: linear-gradient(90deg, #ffb3b3 0%, #ffe7c7 100%);
+        transform: scale(1.15) rotate(5deg);
     }
 </style>
 </br>
