@@ -1,30 +1,30 @@
 pub use fckn_gay_email_interface::Email as Interface;
 use fckn_gay_email_lettre::LettreEmail;
-use fckn_gay_email_stdout::Email as StdOutEmail;
+use fckn_gay_email_stdout::Email as DummyEmail;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Providers {
     Lettre,
-    StdOut,
+    Dummy,
 }
 
 #[derive(Debug, serde::Deserialize)]
 pub struct Config {
     provider: Option<Providers>,
     lettre: Option<<LettreEmail as Interface>::Config>,
-    stdout: Option<<StdOutEmail as Interface>::Config>,
+    dummy: Option<<DummyEmail as Interface>::Config>,
 }
 
 pub enum Email {
     Lettre(LettreEmail),
-    StdOut(StdOutEmail),
+    Dummy(DummyEmail),
 }
 
 #[derive(Debug)]
 pub enum Error {
     Lettre(<LettreEmail as Interface>::Error),
-    StdOut(<StdOutEmail as Interface>::Error),
+    Dummy(<DummyEmail as Interface>::Error),
     MissingConfig(&'static str),
     NoConfig,
     CantChoseProvider,
@@ -34,7 +34,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Lettre(err) => write!(f, "{err}"),
-            Error::StdOut(err) => write!(f, "{err}"),
+            Error::Dummy(err) => write!(f, "{err}"),
             Error::MissingConfig(msg) => {
                 write!(f, "Missing configuration for selected provider: {msg}")
             }
@@ -53,7 +53,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::Lettre(err) => err.source(),
-            Error::StdOut(err) => err.source(),
+            Error::Dummy(err) => err.source(),
             Error::MissingConfig(_) | Error::NoConfig | Error::CantChoseProvider => None,
         }
     }
@@ -71,20 +71,20 @@ impl Interface for Email {
                         .map(Email::Lettre)
                         .map_err(Error::Lettre)
                 }
-                Providers::StdOut => {
-                    StdOutEmail::new(config.stdout.ok_or(Error::MissingConfig("StdOut"))?)
-                        .map(Email::StdOut)
-                        .map_err(Error::StdOut)
+                Providers::Dummy => {
+                    DummyEmail::new(config.dummy.ok_or(Error::MissingConfig("Dummy"))?)
+                        .map(Email::Dummy)
+                        .map_err(Error::Dummy)
                 }
             }
         } else {
-            match (config.lettre, config.stdout) {
+            match (config.lettre, config.dummy) {
                 (Some(lettre), None) => LettreEmail::new(lettre)
                     .map(Email::Lettre)
                     .map_err(Error::Lettre),
-                (None, Some(stdout)) => StdOutEmail::new(stdout)
-                    .map(Email::StdOut)
-                    .map_err(Error::StdOut),
+                (None, Some(dummy)) => DummyEmail::new(dummy)
+                    .map(Email::Dummy)
+                    .map_err(Error::Dummy),
                 (None, None) => Err(Error::NoConfig),
                 _ => Err(Error::CantChoseProvider),
             }
@@ -103,10 +103,10 @@ impl Interface for Email {
                 .send_email(from, to, subject, body)
                 .await
                 .map_err(Error::Lettre),
-            Email::StdOut(email) => email
+            Email::Dummy(email) => email
                 .send_email(from, to, subject, body)
                 .await
-                .map_err(Error::StdOut),
+                .map_err(Error::Dummy),
         }
     }
 }

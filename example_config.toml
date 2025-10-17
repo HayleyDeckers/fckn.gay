@@ -1,0 +1,75 @@
+# what address should the server bind to? 
+address = "127.0.0.1:8080"
+# and what is the public suffix that should be exposed to the user?
+# e.g. if this is "example.com", a user will be able to register as "their.username.example.com"
+public_suffix = "is.fckn.gay"
+
+# here we specify which provider we want to use for the 3 interfaces the server needs:
+#  - a DNS interface for configuring the DNS,
+#  - a user database interface for storing users login information and such, 
+#  - an email interface for sending transactional emails like "confirm sign-up" and "reset password" 
+# we set all three to "dummy" here, which is a simple testing interface without any set-up required.
+dns.provider = "dummy"           # will simply keep an in-memory store of records, not persisted to disk
+user_database.provider = "dummy" # will keep an in-memory store of users, not persisted to disk
+email.provider = "dummy"         # will simply print emails to stdout
+
+# and below we configure the providers. We've included set-up not just for the dummy interfaces,
+# but also the more full-featured interfaces.
+# Switching between them is as simple as updating the provider fields aboves
+
+# The dummy DNS provider allows you to spin up quickly with minimal dependencies.
+# New records are simply added to an in-memory hashmap. Changes are not persisted to disk.
+[dns.dummy]
+entries = [
+    { name = "hayley.is.fckn.gay", record_type = "A", content = "127.0.0.1", ttl_seconds = 3600 },
+    { name = "hayley.is.fckn.gay", record_type = "MX", content = "mail.fckn.gay", ttl_seconds = 3600 },
+    # the username for this entry would be test
+    { name = "this.test.is.fckn.gay", record_type = "A", content = "1.2.3.4", ttl_seconds = 3600 },
+]
+
+# the hickory provider spins up a full DNS server as part of the binary.
+# it's not production ready yet but you can use this to deploy a fully functional prototype without 
+# an external DNS provider.
+# changes are persisted to a text file.
+[dns.hickory]
+file_path = "record.log"
+# the address used by the DNS server, be sure to open the ports.
+tcp_addr = "127.0.0.1:53"
+udp_addr = "127.0.0.1:53"
+# should be the same as the public suffix, plus a dot. We might remove this in the future.
+zone_name = "is.fckn.gay."
+
+# the porkbun provider allows you to use porkbun's DNS API
+# through the `porkbun-api` crate ( https://crates.io/crates/porkbun-api )
+# this requires you have an account and API key with them, and changes will be _live_.
+[dns.porkbun]
+# the domain you have registered at porkbun. Should be a substring of the public suffix.
+domain = "fckn.gay"
+# your credentials
+api_key = "YOUR_API_KEY"
+secret_key = "YOUR_SECRET_KEY"
+
+# the dummy database is configured with a list of username -> password pairs.
+# changes made through the api are not persisted (it's just for testing!) 
+# but you can add or remove entries using the server api
+[user_database.dummy]
+admin = "password"
+test = "test"
+hayley = "gayley"
+
+# the diesel backend uses an SQLite database that is persisted to disk
+# this is the most production ready option but requires more set-up.
+[user_database.diesel]
+database_url = "sqlite.db"
+
+# no configuration needed for the dummy provider - it just prints to stdout!
+[email.dummy]
+
+# this config will actually send emails from the provided account.
+# Be careful when using this one that you do not get flagged as spamming by your provider
+# e.g. because you send emails with the wrong "from" adress.
+[email.lettre]
+smtp_server = "example.com"
+smtp_port = 587
+username = "[username]"
+password = "[password]"

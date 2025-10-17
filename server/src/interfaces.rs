@@ -41,7 +41,7 @@ impl Display for PublicSuffix {
 pub struct Config {
     /// the address of the server
     pub address: String,
-    pub publix_suffix: PublicSuffix,
+    pub public_suffix: PublicSuffix,
     pub dns: <Dns as DnsInterface>::Config,
     pub user_database: <UserDatabase as UserDatabaseIntferface>::Config,
     pub email: <Email as EmailInterface>::Config,
@@ -113,7 +113,29 @@ impl Interfaces {
             user_database,
             email,
             auth_cache: Arc::new(crate::auth_cache::AuthenticationCache::new()),
-            hostname: config.publix_suffix,
+            hostname: config.public_suffix,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_example_config_parses() {
+        // Test that the example config file can be parsed without errors
+        let config_path = "../example_config.toml";
+        match Config::load_from_file(config_path) {
+            Ok(config) => {
+                // Basic validation that the config loaded correctly
+                assert!(!config.address.is_empty());
+                assert!(!config.public_suffix.to_string().is_empty());
+                println!("✅ Example config parsed successfully!");
+            }
+            Err(e) => {
+                panic!("Failed to parse example config: {}", e);
+            }
+        }
     }
 }
