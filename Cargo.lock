@@ -665,9 +665,18 @@ dependencies = [
 name = "fckn-gay-email"
 version = "0.1.0"
 dependencies = [
+ "fckn-gay-email-dummy",
  "fckn-gay-email-interface",
  "fckn-gay-email-lettre",
- "fckn-gay-email-stdout",
+ "serde",
+]
+
+[[package]]
+name = "fckn-gay-email-dummy"
+version = "0.1.0"
+dependencies = [
+ "fckn-gay-email-interface",
+ "lettre",
  "serde",
 ]
 
@@ -680,15 +689,6 @@ dependencies = [
 
 [[package]]
 name = "fckn-gay-email-lettre"
-version = "0.1.0"
-dependencies = [
- "fckn-gay-email-interface",
- "lettre",
- "serde",
-]
-
-[[package]]
-name = "fckn-gay-email-stdout"
 version = "0.1.0"
 dependencies = [
  "fckn-gay-email-interface",
@@ -720,7 +720,7 @@ version = "0.1.0"
 dependencies = [
  "fckn-gay-user-database-csv",
  "fckn-gay-user-database-diesel",
- "fckn-gay-user-database-hardcoded",
+ "fckn-gay-user-database-dummy",
  "fckn-gay-user-database-interface",
  "serde",
 ]
@@ -748,7 +748,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "fckn-gay-user-database-hardcoded"
+name = "fckn-gay-user-database-dummy"
 version = "0.1.0"
 dependencies = [
  "chrono",

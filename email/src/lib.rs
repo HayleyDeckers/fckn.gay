@@ -1,6 +1,6 @@
+use fckn_gay_email_dummy::Email as DummyEmail;
 pub use fckn_gay_email_interface::Email as Interface;
 use fckn_gay_email_lettre::LettreEmail;
-use fckn_gay_email_stdout::Email as DummyEmail;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]

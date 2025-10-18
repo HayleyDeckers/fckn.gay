@@ -1,5 +1,5 @@
 [package]
-name = "fckn-gay-email-stdout"
+name = "fckn-gay-email-dummy"
 version = "0.1.0"
 edition = "2024"
 publish = false

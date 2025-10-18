@@ -1,6 +1,6 @@
 pub use fckn_gay_user_database_csv::Database as CsvDatabase;
 pub use fckn_gay_user_database_diesel::Database as DieselDatabase;
-pub use fckn_gay_user_database_hardcoded::Database as DummyDatabase;
+pub use fckn_gay_user_database_dummy::Database as DummyDatabase;
 pub use fckn_gay_user_database_interface::{UserDatabase as Interface, Uuid};
 use serde::Deserialize;
 

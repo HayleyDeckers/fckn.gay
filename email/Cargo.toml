@@ -8,8 +8,8 @@ publish = false
 workspace = true
 
 [dependencies]
+fckn-gay-email-dummy = { path = "./implementors/dummy" }
 fckn-gay-email-interface = { path = "./interface" }
 fckn-gay-email-lettre = { path = "./implementors/lettre" }
-fckn-gay-email-stdout = { path = "./implementors/stdout" }
 
 serde.workspace = true

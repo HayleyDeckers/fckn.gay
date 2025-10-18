@@ -10,7 +10,7 @@ workspace = true
 [dependencies]
 fckn-gay-user-database-csv = { path = "./implementors/csv" }
 fckn-gay-user-database-diesel = { path = "./implementors/diesel" }
-fckn-gay-user-database-hardcoded = { path = "./implementors/hardcoded" }
+fckn-gay-user-database-dummy = { path = "./implementors/dummy" }
 fckn-gay-user-database-interface = { path = "./interface" }
 
 serde.workspace = true

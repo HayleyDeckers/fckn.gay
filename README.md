@@ -28,7 +28,7 @@ validation/    # Validation functions shared between the backend (native) and fr
 
 Each interface has multiple implementors:
 - **DNS**: Hickory (self-hosted), Porkbun (cloud), Dummy (for testing)
-- **Email**: Lettre (SMTP), Stdout (debug), more coming soon!
+- **Email**: Lettre (SMTP), dummy (print to stdout), more coming soon!
 - **User DB**: Diesel (Sqlite), CSV, Dummy (for testing)
 
 Each interface folder has the following substructure, where multiple implementors live in a sub-crate alongside a trait-defining interface crate.
@@ -54,7 +54,7 @@ cargo run -- --config example_config.toml
 The config system is made to be flexible - you can mix and match providers
 
 ```toml
-# Use Hickory for DNS, SQLite for users, stdout for email
+# Use Hickory for DNS, SQLite for users, dummy for email
 dns.provider = "hickory"
 user_database.provider = "diesel"
 email.provider = "dummy"
