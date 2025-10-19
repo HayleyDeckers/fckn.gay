@@ -643,6 +643,7 @@ dependencies = [
  "hickory-server",
  "serde",
  "tokio",
+ "toml",
 ]
 
 [[package]]

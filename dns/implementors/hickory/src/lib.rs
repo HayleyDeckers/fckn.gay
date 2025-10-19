@@ -1,4 +1,14 @@
-use std::{io::Read, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc, time::Duration, vec};
+use std::{
+    collections::BTreeMap,
+    io::Read,
+    net::SocketAddr,
+    num::NonZeroU64,
+    ops::{Deref, DerefMut},
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+    vec,
+};
 
 use fckn_gay_dns_interface::{Dns, Record, RecordType};
 use hickory_server::{
@@ -6,12 +16,12 @@ use hickory_server::{
     authority::{Catalog, ZoneType},
     proto::{
         ProtoError,
-        rr::{Name, RData, Record as HickoryRecord, RecordType as HickoryRecordType, RrKey, rdata},
+        rr::{Name, RData, Record as HickoryRecord, RecordType as HickoryRecordType, rdata},
     },
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
     store::in_memory::InMemoryAuthority,
 };
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeSeq};
 use tokio::{
     fs::File,
     io::{AsyncSeekExt, AsyncWriteExt},
@@ -37,25 +47,101 @@ fn deserialize_name<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Name, 
 /// This struct holds the client for interacting with the Porkbun API.
 pub struct HickoryDns {
     authority: Arc<InMemoryAuthority>,
-    // fragile! can get corrupted if we get killed mid write
-    server_file: Mutex<File>,
+    server_file: Mutex<FileBacked<Database>>,
 }
 
-fn record_type_to_hickory(record_type: RecordType) -> HickoryRecordType {
-    match record_type {
-        RecordType::A => HickoryRecordType::A,
-        RecordType::AAAA => HickoryRecordType::AAAA,
-        RecordType::CNAME => HickoryRecordType::CNAME,
-        RecordType::MX => HickoryRecordType::MX,
-        RecordType::NS => HickoryRecordType::NS,
-        RecordType::SRV => HickoryRecordType::SRV,
-        RecordType::TXT => HickoryRecordType::TXT,
-        // todo: probably not support this
-        RecordType::ALIAS => HickoryRecordType::CNAME,
-        RecordType::CAA => HickoryRecordType::CAA,
-        RecordType::HTTPS => HickoryRecordType::HTTPS,
-        RecordType::SVCB => HickoryRecordType::SVCB,
-        RecordType::TLSA => HickoryRecordType::TLSA,
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct Database {
+    #[serde(
+        default,
+        serialize_with = "serialize_records",
+        deserialize_with = "deserialize_records"
+    )]
+    records: BTreeMap<NonZeroU64, HickoryRecord>,
+}
+
+fn serialize_records<S: Serializer>(
+    records: &BTreeMap<NonZeroU64, HickoryRecord>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let mut seq = serializer.serialize_seq(Some(records.len()))?;
+    for (id, record) in records.iter() {
+        seq.serialize_element(&(id.get(), record))?;
+    }
+    seq.end()
+}
+
+fn deserialize_records<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<NonZeroU64, HickoryRecord>, D::Error> {
+    let seq = Vec::<(NonZeroU64, HickoryRecord)>::deserialize(deserializer)?;
+    let map = seq.into_iter().collect();
+    Ok(map)
+}
+impl Database {
+    fn add_record(&mut self, record: HickoryRecord) -> u64 {
+        let id = self
+            .records
+            .last_key_value()
+            .map(|(id, _)| id.get())
+            .unwrap_or_else(|| 0);
+        let id = NonZeroU64::new(id + 1).expect("record id overflow");
+        self.records.insert(id, record);
+        id.get()
+    }
+    fn delete_record(&mut self, id: u64) -> Option<HickoryRecord> {
+        self.records.remove(&NonZeroU64::new(id).unwrap())
+    }
+}
+
+struct FileBacked<T: Serialize> {
+    file: File,
+    data: T,
+}
+
+impl<T: Serialize> Deref for FileBacked<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl<T: Serialize> DerefMut for FileBacked<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
+
+impl<T: Serialize> FileBacked<T> {
+    // fragile! can get corrupted if we get killed mid write
+    async fn save(&mut self) -> Result<(), std::io::Error> {
+        self.file.seek(std::io::SeekFrom::Start(0)).await?;
+        self.file
+            .write_all(
+                toml::to_string(&self.data)
+                    .map_err(std::io::Error::other)?
+                    .as_bytes(),
+            )
+            .await?;
+        self.file.flush().await?;
+        Ok(())
+    }
+}
+
+impl<T: Serialize + for<'de> Deserialize<'de>> FileBacked<T> {
+    fn from_file(path: &Path) -> Self {
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)
+            .unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        let data = toml::from_str(&contents).unwrap();
+        let file = File::from_std(file);
+        Self { file, data }
     }
 }
 
@@ -141,7 +227,7 @@ fn record_from_hickory_record(r: &HickoryRecord) -> Record {
 impl Dns for HickoryDns {
     type Config = Config;
     type Error = ProtoError;
-    type Key = RrKey; //not unique! needs another idx
+    type Key = u64;
 
     fn new(config: Self::Config) -> Result<Self, Self::Error>
     where
@@ -149,27 +235,14 @@ impl Dns for HickoryDns {
     {
         let zone_name = config.zone_name;
         let path = PathBuf::from(&config.file_path);
+        let file: FileBacked<Database> = FileBacked::from_file(&path);
         let mut authority: InMemoryAuthority =
             InMemoryAuthority::empty(zone_name.clone(), ZoneType::Primary, false);
-        if !path.exists() {
-            //todo: populate with minimal zone data
-            std::fs::File::create_new(&path).unwrap();
-        };
-        let mut file = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&path)
-            .unwrap();
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap();
-        for line in contents.lines() {
-            println!("line: {line}");
-            authority.upsert_mut(
-                hickory_record_from_record(Record::from_str(line).unwrap()),
-                0,
-            );
+        for record in file.records.values().cloned() {
+            if !authority.upsert_mut(record, 0) {
+                panic!("failed to add record to authority");
+            }
         }
-
         let authority = Arc::new(authority);
 
         let mut catalog = Catalog::new();
@@ -198,59 +271,38 @@ impl Dns for HickoryDns {
         });
         Ok(Self {
             authority,
-            server_file: Mutex::new(File::from_std(file)),
+            server_file: Mutex::new(file),
         })
     }
 
     async fn add_record(&self, record: Record) -> Result<Self::Key, Self::Error> {
-        let name = Name::from_utf8(if record.name.ends_with('.') {
-            record.name.clone()
-        } else {
-            format!("{}.", record.name)
-        })?;
-        let key = RrKey::new(
-            name.clone().into(),
-            record_type_to_hickory(record.record_type),
-        );
-        println!("adding record: {key:?}");
         let hickory_record = hickory_record_from_record(record);
+        //this whole thing is a bit of a bad hack for now.
         let mut file = self.server_file.lock().await;
+        let id = file.add_record(hickory_record.clone());
         if !self.authority.upsert(hickory_record, 0).await {
-            panic!("failed to add record");
+            file.delete_record(id);
+            // will panic here on identical records
+            panic!("failed to add record to authority");
         }
-        file.seek(std::io::SeekFrom::Start(0)).await.unwrap();
-        let new_content = self
-            .authority
-            .records()
-            .await
-            .iter()
-            .flat_map(|(_, r)| r.records_without_rrsigs())
-            .map(record_from_hickory_record)
-            .map(|r| format!("{r}\n"))
-            .collect::<String>();
-        println!("new content:\n{new_content}");
-        file.write_all(new_content.as_bytes()).await.unwrap();
-        file.flush().await.unwrap();
-        Ok(key)
+        file.save().await?;
+        Ok(id)
     }
 
     async fn delete_record(&self, key: Self::Key) -> Result<(), Self::Error> {
-        self.authority.records_mut().await.remove(&key);
-        //todo: ok_or
+        let mut file = self.server_file.lock().await;
+        if file.delete_record(key).is_some() {
+            file.save().await?;
+        }
         Ok(())
     }
 
     async fn list_records(&self) -> Result<Vec<(Self::Key, Record)>, Self::Error> {
-        Ok(self
-            .authority
-            .records()
-            .await
+        let file = self.server_file.lock().await;
+        Ok(file
+            .records
             .iter()
-            .flat_map(|(key, r)| r.records_without_rrsigs().zip(std::iter::repeat(key)))
-            .map(|(r, key)| {
-                let record = record_from_hickory_record(r);
-                (key.clone(), record)
-            })
-            .collect::<Vec<_>>())
+            .map(|(id, record)| (id.get(), record_from_hickory_record(record)))
+            .collect())
     }
 }

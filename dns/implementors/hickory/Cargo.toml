@@ -11,3 +11,4 @@ async-trait = { workspace = true }
 hickory-server = { workspace = true }
 serde.workspace = true
 tokio = { workspace = true, features = ["sync"] }
+toml.workspace = true
