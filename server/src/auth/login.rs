@@ -7,7 +7,6 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseInterface};
-use tokio::sync::Mutex;
 
 use crate::auth_cache::AuthenticationCache;
 
@@ -18,17 +17,12 @@ pub struct Login {
 }
 
 pub async fn login(
-    State(user_database): State<Arc<Mutex<UserDatabase>>>,
+    State(user_database): State<Arc<UserDatabase>>,
     State(auth_cache): State<Arc<AuthenticationCache>>,
     jar: CookieJar,
     Form(form): Form<Login>,
 ) -> Result<CookieJar, StatusCode> {
-    if user_database
-        .lock()
-        .await
-        .is_valid(&form.username, &form.password)
-        .await
-    {
+    if user_database.is_valid(&form.username, &form.password).await {
         let token = auth_cache
             .new_token_for(
                 form.username,

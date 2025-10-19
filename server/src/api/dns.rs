@@ -8,7 +8,6 @@ use axum::{
     routing::{get, post},
 };
 use fckn_gay_dns::{Dns, Interface as DnsInterface, Record as DnsRecord};
-use tokio::sync::Mutex;
 
 use crate::{
     auth_cache::{AuthenticatedFor, add_authorization_or_unauthorized},
@@ -18,11 +17,11 @@ use crate::{
 
 /// Get DNS records for the authenticated user
 async fn get_records(
-    State(dns): State<Arc<Mutex<Dns>>>,
+    State(dns): State<Arc<Dns>>,
     State(suffix): State<PublicSuffix>,
     authenticed_for: AuthenticatedFor,
 ) -> Result<axum::Json<Vec<DnsRecord>>, AppError> {
-    let records = dns.lock().await.list_records().await?;
+    let records = dns.list_records().await?;
     let pat = format!(".{}{}", authenticed_for.user_id(), suffix);
     let filtered_records = records
         .into_iter()
@@ -39,7 +38,7 @@ async fn get_records(
 
 /// Add a new DNS record for the authenticated user
 async fn add_record(
-    State(dns): State<Arc<Mutex<Dns>>>,
+    State(dns): State<Arc<Dns>>,
     State(suffix): State<PublicSuffix>,
     authenticed_for: AuthenticatedFor,
     AxumJson(req): AxumJson<DnsRecord>,
@@ -49,7 +48,7 @@ async fn add_record(
     if !req.name.ends_with(&user_pat) && req.name != user_pat[1..] {
         return Err(anyhow::anyhow!("Record name must match your user domain").into());
     }
-    let _key = dns.lock().await.add_record(req).await?;
+    let _key = dns.add_record(req).await?;
     Ok(StatusCode::CREATED)
 }
 

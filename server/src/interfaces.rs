@@ -6,7 +6,6 @@ use fckn_gay_dns::{Dns, Interface as DnsInterface};
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseIntferface};
 use serde::{Deserialize, Deserializer};
-use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct PublicSuffix(Arc<String>);
@@ -59,28 +58,28 @@ impl Config {
 #[derive(Clone)]
 pub struct Interfaces {
     /// The DNS interface for managing DNS records.
-    pub dns: Arc<Mutex<Dns>>,
+    pub dns: Arc<Dns>,
     /// The user database interface for managing user credentials.
-    pub user_database: Arc<Mutex<UserDatabase>>,
+    pub user_database: Arc<UserDatabase>,
     /// The email interface for sending emails.
-    pub email: Arc<Mutex<Email>>,
+    pub email: Arc<Email>,
     /// a cache for login sessions, gets cleared on server restart
     pub auth_cache: Arc<crate::auth_cache::AuthenticationCache>,
     pub hostname: PublicSuffix,
 }
 
-impl FromRef<Interfaces> for Arc<Mutex<Dns>> {
+impl FromRef<Interfaces> for Arc<Dns> {
     fn from_ref(state: &Interfaces) -> Self {
         state.dns.clone()
     }
 }
 
-impl FromRef<Interfaces> for Arc<Mutex<UserDatabase>> {
+impl FromRef<Interfaces> for Arc<UserDatabase> {
     fn from_ref(state: &Interfaces) -> Self {
         state.user_database.clone()
     }
 }
-impl FromRef<Interfaces> for Arc<Mutex<Email>> {
+impl FromRef<Interfaces> for Arc<Email> {
     fn from_ref(state: &Interfaces) -> Self {
         state.email.clone()
     }
@@ -101,12 +100,12 @@ impl Interfaces {
     /// Creates a new instance of `Interfaces` with the given configuration.
     pub fn new(config: Config) -> Result<Self> {
         let dns = Dns::new(config.dns).context("Failed to create DNS interface")?;
-        let dns = Arc::new(Mutex::new(dns));
+        let dns = Arc::new(dns);
         let user_database = UserDatabase::new(config.user_database)
             .context("Failed to create UserDatabase interface")?;
-        let user_database = Arc::new(Mutex::new(user_database));
+        let user_database = Arc::new(user_database);
         let email = Email::new(config.email).context("Failed to create Email interface")?;
-        let email = Arc::new(Mutex::new(email));
+        let email = Arc::new(email);
 
         Ok(Interfaces {
             dns,

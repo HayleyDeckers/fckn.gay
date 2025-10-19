@@ -4,11 +4,11 @@ use anyhow::anyhow;
 use axum::{
     extract::{Form, Path, State},
     http::StatusCode,
+    response::Redirect,
 };
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseInterface};
 use fckn_gay_validation::{validate_password, validate_username};
-use tokio::sync::Mutex;
 
 use crate::error::AppError;
 
@@ -20,13 +20,11 @@ pub struct Signup {
 }
 
 pub async fn sign_up(
-    //todo(hayley): remove these locks
-    State(user_database): State<Arc<Mutex<UserDatabase>>>,
-    State(email): State<Arc<Mutex<Email>>>,
+    State(user_database): State<Arc<UserDatabase>>,
+    State(email): State<Arc<Email>>,
     Form(form): Form<Signup>,
 ) -> Result<StatusCode, AppError> {
-    let db = user_database.lock().await;
-    if !db.is_available(&form.username).await {
+    if !user_database.is_available(&form.username).await {
         return Ok(StatusCode::CONFLICT);
     }
     let username_result = validate_username(&form.username);
@@ -52,15 +50,13 @@ pub async fn sign_up(
     }
 
     // this is safe for now since we do check in `add_user` but we can race.
-    let Ok(uuid) = db
+    let Ok(uuid) = user_database
         .add_user(&form.username, &form.password, &form.email)
         .await
     else {
         return Ok(StatusCode::INTERNAL_SERVER_ERROR);
     };
     email
-        .lock()
-        .await
         .send_email(
             "im@fckn.gay",
             &form.email,
@@ -81,11 +77,10 @@ pub async fn sign_up(
 }
 
 pub async fn confirm_sign_up(
-    //todo(hayley): remove these locks
-    State(user_database): State<Arc<Mutex<UserDatabase>>>,
+    State(user_database): State<Arc<UserDatabase>>,
     Path(uuid): Path<fckn_gay_user_database::Uuid>,
-) -> Result<String, AppError> {
-    let db = user_database.lock().await;
-    db.activate_user(uuid).await?;
-    Ok("Account activated, you can now <a href=\"/login\">login</a>".into())
+) -> Result<Redirect, AppError> {
+    user_database.activate_user(uuid).await?;
+    // redirect to home page
+    Ok(Redirect::to("/"))
 }
