@@ -3,7 +3,7 @@ use std::{
     io::Read,
     net::SocketAddr,
     num::NonZeroU64,
-    ops::{Deref, DerefMut},
+    ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -13,55 +13,51 @@ use std::{
 use fckn_gay_dns_interface::{Dns, Record, RecordType};
 use hickory_server::{
     ServerFuture,
-    authority::{Catalog, ZoneType},
+    authority::MessageResponseBuilder,
     proto::{
         ProtoError,
-        rr::{Name, RData, Record as HickoryRecord, RecordType as HickoryRecordType, rdata},
+        op::{OpCode, ResponseCode},
+        rr::{
+            DNSClass, Name, RData, Record as HickoryRecord, RecordType as HickoryRecordType, rdata,
+        },
     },
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
-    store::in_memory::InMemoryAuthority,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeSeq};
 use tokio::{
     fs::File,
     io::{AsyncSeekExt, AsyncWriteExt},
-    sync::Mutex,
+    sync::{RwLock, RwLockReadGuard},
 };
 
 /// configuration for the Porkbun DNS provider.
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    #[serde(deserialize_with = "deserialize_name")]
-    zone_name: Name,
     file_path: String,
     tcp_addr: Option<SocketAddr>,
     udp_addr: Option<SocketAddr>,
 }
 
-fn deserialize_name<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Name, D::Error> {
-    let s = String::deserialize(deserializer)?;
-    Name::from_utf8(&s).map_err(serde::de::Error::custom)
-}
-
 /// A DNS provider implementation using Porkbun.
 /// This struct holds the client for interacting with the Porkbun API.
 pub struct HickoryDns {
-    authority: Arc<InMemoryAuthority>,
-    server_file: Mutex<FileBacked<Database>>,
+    server_file: FileBacked,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Deserialize, Clone)]
 struct Database {
-    #[serde(
-        default,
-        serialize_with = "serialize_records",
-        deserialize_with = "deserialize_records"
-    )]
-    records: BTreeMap<NonZeroU64, HickoryRecord>,
+    #[serde(default, deserialize_with = "deserialize_records")]
+    records: Arc<RwLock<BTreeMap<NonZeroU64, HickoryRecord>>>,
 }
 
-fn serialize_records<S: Serializer>(
-    records: &BTreeMap<NonZeroU64, HickoryRecord>,
+#[derive(Serialize)]
+struct LockedRecords<'a> {
+    #[serde(serialize_with = "serialize_records")]
+    records: RwLockReadGuard<'a, BTreeMap<NonZeroU64, HickoryRecord>>,
+}
+
+fn serialize_records<'a, S: Serializer>(
+    records: &RwLockReadGuard<'a, BTreeMap<NonZeroU64, HickoryRecord>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     let mut seq = serializer.serialize_seq(Some(records.len()))?;
@@ -73,62 +69,60 @@ fn serialize_records<S: Serializer>(
 
 fn deserialize_records<'de, D: Deserializer<'de>>(
     deserializer: D,
-) -> Result<BTreeMap<NonZeroU64, HickoryRecord>, D::Error> {
+) -> Result<Arc<RwLock<BTreeMap<NonZeroU64, HickoryRecord>>>, D::Error> {
     let seq = Vec::<(NonZeroU64, HickoryRecord)>::deserialize(deserializer)?;
     let map = seq.into_iter().collect();
-    Ok(map)
+    Ok(Arc::new(RwLock::new(map)))
 }
 impl Database {
-    fn add_record(&mut self, record: HickoryRecord) -> u64 {
-        let id = self
-            .records
+    async fn add_record(&self, record: HickoryRecord) -> u64 {
+        let mut records = self.records.write().await;
+        let id = records
             .last_key_value()
             .map(|(id, _)| id.get())
             .unwrap_or_else(|| 0);
         let id = NonZeroU64::new(id + 1).expect("record id overflow");
-        self.records.insert(id, record);
+        records.insert(id, record);
         id.get()
     }
-    fn delete_record(&mut self, id: u64) -> Option<HickoryRecord> {
-        self.records.remove(&NonZeroU64::new(id).unwrap())
+    async fn delete_record(&self, id: u64) -> Option<HickoryRecord> {
+        let mut records = self.records.write().await;
+        records.remove(&NonZeroU64::new(id).unwrap())
     }
 }
 
-struct FileBacked<T: Serialize> {
-    file: File,
-    data: T,
+struct FileBacked {
+    file: RwLock<File>,
+    data: Database,
 }
 
-impl<T: Serialize> Deref for FileBacked<T> {
-    type Target = T;
+impl Deref for FileBacked {
+    type Target = Database;
     fn deref(&self) -> &Self::Target {
         &self.data
     }
 }
 
-impl<T: Serialize> DerefMut for FileBacked<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.data
-    }
-}
-
-impl<T: Serialize> FileBacked<T> {
+impl FileBacked {
     // fragile! can get corrupted if we get killed mid write
-    async fn save(&mut self) -> Result<(), std::io::Error> {
-        self.file.seek(std::io::SeekFrom::Start(0)).await?;
-        self.file
-            .write_all(
-                toml::to_string(&self.data)
-                    .map_err(std::io::Error::other)?
-                    .as_bytes(),
-            )
-            .await?;
-        self.file.flush().await?;
+    async fn save(&self) -> Result<(), std::io::Error> {
+        let mut file = self.file.write().await;
+        file.seek(std::io::SeekFrom::Start(0)).await?;
+        let records = LockedRecords {
+            records: self.data.records.read().await,
+        };
+        file.write_all(
+            toml::to_string(&records)
+                .map_err(std::io::Error::other)?
+                .as_bytes(),
+        )
+        .await?;
+        file.flush().await?;
         Ok(())
     }
 }
 
-impl<T: Serialize + for<'de> Deserialize<'de>> FileBacked<T> {
+impl FileBacked {
     fn from_file(path: &Path) -> Self {
         let mut file = std::fs::OpenOptions::new()
             .read(true)
@@ -140,21 +134,8 @@ impl<T: Serialize + for<'de> Deserialize<'de>> FileBacked<T> {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
         let data = toml::from_str(&contents).unwrap();
-        let file = File::from_std(file);
+        let file = RwLock::new(File::from_std(file));
         Self { file, data }
-    }
-}
-
-struct Wrapper(Catalog);
-
-#[async_trait::async_trait]
-impl RequestHandler for Wrapper {
-    async fn handle_request<R: ResponseHandler>(
-        &self,
-        request: &Request,
-        response_handle: R,
-    ) -> ResponseInfo {
-        self.0.handle_request(request, response_handle).await
     }
 }
 
@@ -233,21 +214,10 @@ impl Dns for HickoryDns {
     where
         Self: Sized,
     {
-        let zone_name = config.zone_name;
         let path = PathBuf::from(&config.file_path);
-        let file: FileBacked<Database> = FileBacked::from_file(&path);
-        let mut authority: InMemoryAuthority =
-            InMemoryAuthority::empty(zone_name.clone(), ZoneType::Primary, false);
-        for record in file.records.values().cloned() {
-            if !authority.upsert_mut(record, 0) {
-                panic!("failed to add record to authority");
-            }
-        }
-        let authority = Arc::new(authority);
-
-        let mut catalog = Catalog::new();
-        catalog.upsert(zone_name.into(), vec![authority.clone()]);
-        let mut server = ServerFuture::new(Wrapper(catalog));
+        let file = FileBacked::from_file(&path);
+        let database = file.data.clone();
+        let mut server = ServerFuture::new(database);
         if let Some(tcp_addr) = config.tcp_addr {
             println!("binding to tcp: {tcp_addr}");
             server
@@ -263,46 +233,108 @@ impl Dns for HickoryDns {
                 .register_socket_std(std::net::UdpSocket::bind(udp_addr).unwrap())
                 .unwrap();
         }
-        // server.register_listenr(listener, timeout);
         tokio::spawn(async move {
-            if let Err(e) = server.block_until_done().await {
+            while let Err(e) = server.block_until_done().await {
                 eprintln!("oopsie: {e}");
             }
         });
-        Ok(Self {
-            authority,
-            server_file: Mutex::new(file),
-        })
+        Ok(Self { server_file: file })
     }
 
     async fn add_record(&self, record: Record) -> Result<Self::Key, Self::Error> {
         let hickory_record = hickory_record_from_record(record);
         //this whole thing is a bit of a bad hack for now.
-        let mut file = self.server_file.lock().await;
-        let id = file.add_record(hickory_record.clone());
-        if !self.authority.upsert(hickory_record, 0).await {
-            file.delete_record(id);
-            // will panic here on identical records
-            panic!("failed to add record to authority");
-        }
-        file.save().await?;
+        let id = self.server_file.add_record(hickory_record.clone()).await;
+        self.server_file.save().await?;
         Ok(id)
     }
 
     async fn delete_record(&self, key: Self::Key) -> Result<(), Self::Error> {
-        let mut file = self.server_file.lock().await;
-        if file.delete_record(key).is_some() {
-            file.save().await?;
+        if self.server_file.delete_record(key).await.is_some() {
+            self.server_file.save().await?;
         }
         Ok(())
     }
 
     async fn list_records(&self) -> Result<Vec<(Self::Key, Record)>, Self::Error> {
-        let file = self.server_file.lock().await;
-        Ok(file
-            .records
+        let records = self.server_file.data.records.read().await;
+        Ok(records
             .iter()
             .map(|(id, record)| (id.get(), record_from_hickory_record(record)))
             .collect())
+    }
+}
+
+// todo: is this correct?
+//  what edge cases do we need to handle? (SOA? Multiple records in one query?)
+// are we returning the right header?
+// handle crashes/unwraps
+#[async_trait::async_trait]
+impl RequestHandler for Database {
+    async fn handle_request<R: ResponseHandler>(
+        &self,
+        request: &Request,
+        mut response_handle: R,
+    ) -> ResponseInfo {
+        if request.op_code() != OpCode::Query {
+            response_handle
+                .send_response(
+                    MessageResponseBuilder::from_message_request(request)
+                        .error_msg(request.header(), ResponseCode::NotImp),
+                )
+                .await
+                .unwrap()
+        } else {
+            let response = MessageResponseBuilder::from_message_request(request);
+            let mut answers = Vec::new();
+            let rlock = self.records.read().await;
+
+            for query in request.queries() {
+                let name = query.name();
+                // some clients send non-ascii names, technically invalid but the default behaviour here is a bit weird
+                // so we check if there's any non-ascii characters and if so, we reparse the name as utf8
+                // and then use that as the name, leading to proper handling of punycoded or non-escaped names.
+                let name = if name.iter().any(|v| !v.is_ascii()) {
+                    if let Ok(reparsed) = String::from_utf8(
+                        name.iter()
+                            .flat_map(|v| v.iter().copied().chain(std::iter::once(b'.')))
+                            .collect(),
+                    ) {
+                        Name::from_utf8(reparsed).ok()
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+                .unwrap_or_else(|| name.clone().into());
+                let query_type = query.query_type();
+                let query_class = query.query_class();
+                // class has to be IN for now
+                if query_class != DNSClass::IN {
+                    continue;
+                }
+                for record in rlock.values() {
+                    if record.name().eq(&name)
+                        && (record.record_type() == query_type
+                            || query_type == HickoryRecordType::ANY)
+                    {
+                        answers.push(record);
+                    }
+                }
+            }
+            if answers.is_empty() {
+                return response_handle
+                    .send_response(
+                        MessageResponseBuilder::from_message_request(request)
+                            .error_msg(request.header(), ResponseCode::NXDomain),
+                    )
+                    .await
+                    .unwrap();
+            } else {
+                let response = response.build(*request.header(), answers, vec![], vec![], vec![]);
+                response_handle.send_response(response).await.unwrap()
+            }
+        }
     }
 }
