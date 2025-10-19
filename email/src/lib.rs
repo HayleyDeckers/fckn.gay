@@ -71,11 +71,9 @@ impl Interface for Email {
                         .map(Email::Lettre)
                         .map_err(Error::Lettre)
                 }
-                Providers::Dummy => {
-                    DummyEmail::new(config.dummy.ok_or(Error::MissingConfig("Dummy"))?)
-                        .map(Email::Dummy)
-                        .map_err(Error::Dummy)
-                }
+                Providers::Dummy => DummyEmail::new(config.dummy.unwrap_or_default())
+                    .map(Email::Dummy)
+                    .map_err(Error::Dummy),
             }
         } else {
             match (config.lettre, config.dummy) {

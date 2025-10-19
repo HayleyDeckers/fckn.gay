@@ -1,7 +1,7 @@
 use fckn_gay_email_interface::Email as Interface;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct Config {}
 
 pub struct Email;
