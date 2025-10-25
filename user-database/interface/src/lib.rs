@@ -194,4 +194,22 @@ pub trait UserDatabase {
     ) -> impl Future<Output = Result<String, Self::Error>> {
         async { todo!("get_dns_record_provider_key is not implemented") }
     }
+
+    #[allow(unused_variables)]
+    /// Gets all DNS records from the database (for migration purposes).
+    fn get_all_dns_records(
+        &self,
+    ) -> impl Future<Output = Result<Vec<DatabaseDnsRecord>, Self::Error>> {
+        async { todo!("get_all_dns_records is not implemented") }
+    }
+
+    #[allow(unused_variables)]
+    /// Updates a DNS record's provider key (for migration purposes).
+    fn update_dns_record_provider_key(
+        &self,
+        record_id: DnsRecordId,
+        new_provider_key: String,
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        async { todo!("update_dns_record_provider_key is not implemented") }
+    }
 }

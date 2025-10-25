@@ -259,4 +259,43 @@ impl UserDatabase for Database {
 
         Ok(record)
     }
+
+    async fn get_all_dns_records(
+        &self,
+    ) -> Result<Vec<fckn_gay_user_database_interface::DatabaseDnsRecord>, Self::Error> {
+        use self::schema::dns_records::dsl::dns_records;
+        let raw_records =
+            dns_records.load::<models::RawDnsRecord>(&mut *self.connection.lock().await)?;
+
+        Ok(raw_records
+            .into_iter()
+            .map(|raw| {
+                let record_id = DnsRecordId::from(raw.clone());
+                let record = DnsRecord::from(raw.clone());
+                fckn_gay_user_database_interface::DatabaseDnsRecord {
+                    id: record_id,
+                    provider_key: raw.provider_key,
+                    record,
+                }
+            })
+            .collect())
+    }
+
+    async fn update_dns_record_provider_key(
+        &self,
+        record_id: DnsRecordId,
+        new_provider_key: String,
+    ) -> Result<(), Self::Error> {
+        use self::schema::dns_records::dsl::{dns_records, provider_key};
+        let record_bytes = record_id.0.to_bytes_le();
+
+        let updated = diesel::update(dns_records.filter(schema::dns_records::id.eq(&record_bytes)))
+            .set(provider_key.eq(&new_provider_key))
+            .execute(&mut *self.connection.lock().await)?;
+
+        if updated == 0 {
+            return Err(Error::Other("Record not found".to_string()));
+        }
+        Ok(())
+    }
 }

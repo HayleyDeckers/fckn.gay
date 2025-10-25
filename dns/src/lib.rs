@@ -73,6 +73,7 @@ impl std::error::Error for Error {
     }
 }
 
+#[derive(Clone)]
 pub enum Key {
     Porkbun(<Porkbun as Interface>::Key),
     Dummy(<Dummy as Interface>::Key),

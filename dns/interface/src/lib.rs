@@ -20,7 +20,7 @@ pub enum RecordType {
     SVCB,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Record {
     pub name: String,
     pub record_type: RecordType,
