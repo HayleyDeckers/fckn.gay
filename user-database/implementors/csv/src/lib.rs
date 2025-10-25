@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use fckn_gay_user_database_interface::UserDatabase;
+use fckn_gay_user_database_interface::{DnsRecord, DnsRecordId, UserDatabase, Uuid};
 
 /// a simple user database parsed from a CSV file.
 pub struct Database {
@@ -40,8 +40,67 @@ impl UserDatabase for Database {
             .contains(&(username.to_string(), password.to_string()))
     }
 
+    async fn validate_and_get_user_id(&self, username: &str, password: &str) -> Option<Uuid> {
+        // CSV implementation doesn't store UUIDs, so we can't return a real UUID
+        // This is a limitation of the CSV implementation
+        if self
+            .users
+            .contains(&(username.to_string(), password.to_string()))
+        {
+            Some(Uuid::new_v4()) // Generate a new UUID each time (not ideal)
+        } else {
+            None
+        }
+    }
+
     /// Checks if a user is available for registration.
     async fn is_available(&self, username: &str) -> bool {
         !self.users.iter().any(|(user, _)| user == username)
+    }
+
+    async fn add_dns_record(
+        &self,
+        user_id: Uuid,
+        record: DnsRecord,
+        provider_key: String,
+    ) -> Result<DnsRecordId, Self::Error> {
+        // CSV implementation - just return a new ID
+        Ok(DnsRecordId::new())
+    }
+
+    async fn get_user_dns_records(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<fckn_gay_user_database_interface::DatabaseDnsRecord>, Self::Error> {
+        // CSV implementation - return empty list
+        Ok(vec![])
+    }
+
+    async fn update_dns_record(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+        record: DnsRecord,
+    ) -> Result<(), Self::Error> {
+        // CSV implementation - do nothing
+        Ok(())
+    }
+
+    async fn delete_dns_record(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+    ) -> Result<(), Self::Error> {
+        // CSV implementation - do nothing
+        Ok(())
+    }
+
+    async fn get_dns_record_provider_key(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+    ) -> Result<String, Self::Error> {
+        // CSV implementation - return a dummy key
+        Ok(format!("csv_key_{}", record_id.0))
     }
 }

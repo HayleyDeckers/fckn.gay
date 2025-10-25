@@ -1,10 +1,12 @@
 use core::panic;
+use std::fmt::Display;
 
 pub use fckn_gay_dns_dummy::DummyDns as Dummy;
 pub use fckn_gay_dns_hickory::HickoryDns as Hickory;
 pub use fckn_gay_dns_interface::{Dns as Interface, Record, RecordType};
 pub use fckn_gay_dns_porkbun::PorkbunDns as Porkbun;
 pub use serde::{Deserialize, Serialize};
+use serde::{Deserializer, Serializer};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -75,6 +77,65 @@ pub enum Key {
     Porkbun(<Porkbun as Interface>::Key),
     Dummy(<Dummy as Interface>::Key),
     Hickory(<Hickory as Interface>::Key),
+}
+
+impl Display for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Key::Porkbun(key) => write!(f, "Porkbun:{key}"),
+            Key::Dummy(key) => write!(f, "Dummy:{key}"),
+            Key::Hickory(key) => write!(f, "Hickory:{key}"),
+        }
+    }
+}
+
+impl Serialize for Key {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.to_string().as_str())
+    }
+}
+
+impl std::str::FromStr for Key {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let Some((provider, key)) = s.split_once(':') else {
+            return Err(String::from("Invalid key format"));
+        };
+        match provider {
+            "Porkbun" => {
+                return Ok(Key::Porkbun(
+                    key.parse().map_err(|e| format!("Invalid key {key}: {e}"))?,
+                ));
+            }
+            "Dummy" => {
+                return Ok(Key::Dummy(
+                    key.parse().map_err(|e| format!("Invalid key {key}: {e}"))?,
+                ));
+            }
+            "Hickory" => {
+                return Ok(Key::Hickory(
+                    key.parse().map_err(|e| format!("Invalid key {key}: {e}"))?,
+                ));
+            }
+            _ => {
+                return Err(String::from("Invalid provider"));
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Key {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(s.parse().map_err(serde::de::Error::custom)?)
+    }
 }
 
 impl Interface for Dns {
@@ -191,6 +252,29 @@ impl Interface for Dns {
                         .collect()
                 })
                 .map_err(Error::Hickory),
+        }
+    }
+
+    async fn update_record(
+        &self,
+        key: Self::Key,
+        record: fckn_gay_dns_interface::Record,
+    ) -> Result<(), Self::Error> {
+        match (self, key) {
+            (Dns::Porkbun(porkbun), Key::Porkbun(porkbun_key)) => porkbun
+                .update_record(porkbun_key, record)
+                .await
+                .map_err(Error::Porkbun),
+            (Dns::Hickory(hickory), Key::Hickory(hickory_key)) => hickory
+                .update_record(hickory_key, record)
+                .await
+                .map_err(Error::Hickory),
+            (Dns::Dummy(dummy), Key::Dummy(dummy_key)) => dummy
+                .update_record(dummy_key, record)
+                .await
+                .map_err(Error::Dummy),
+            #[allow(unreachable_patterns)]
+            _ => panic!("Invalid key type for DNS provider"),
         }
     }
 }

@@ -287,4 +287,20 @@ pub trait Dns {
     ///
     /// A vector of DNS records or an error message.
     fn list_records(&self) -> impl Future<Output = Result<Vec<(Self::Key, Record)>, Self::Error>>;
+
+    /// Updates a DNS record.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key of the DNS record to update.
+    /// * `record` - The new DNS record content.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
+    fn update_record(
+        &self,
+        key: Self::Key,
+        record: Record,
+    ) -> impl Future<Output = Result<(), Self::Error>>;
 }

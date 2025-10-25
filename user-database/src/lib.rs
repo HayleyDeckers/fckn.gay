@@ -1,7 +1,9 @@
 pub use fckn_gay_user_database_csv::Database as CsvDatabase;
 pub use fckn_gay_user_database_diesel::Database as DieselDatabase;
 pub use fckn_gay_user_database_dummy::Database as DummyDatabase;
-pub use fckn_gay_user_database_interface::{UserDatabase as Interface, Uuid};
+pub use fckn_gay_user_database_interface::{
+    DatabaseDnsRecord, DnsRecordId, UserDatabase as Interface, Uuid,
+};
 use serde::Deserialize;
 
 pub enum Database {
@@ -124,6 +126,14 @@ impl Interface for Database {
         }
     }
 
+    async fn validate_and_get_user_id(&self, username: &str, password: &str) -> Option<Uuid> {
+        match self {
+            Database::Dummy(db) => db.validate_and_get_user_id(username, password).await,
+            Database::Csv(db) => db.validate_and_get_user_id(username, password).await,
+            Database::Diesel(db) => db.validate_and_get_user_id(username, password).await,
+        }
+    }
+
     async fn is_available(&self, username: &str) -> bool {
         match self {
             Database::Dummy(db) => db.is_available(username).await,
@@ -161,4 +171,110 @@ impl Interface for Database {
             Database::Diesel(db) => db.activate_user(uuid).await.map_err(Self::Error::Diesel),
         }
     }
+
+    async fn add_dns_record(
+        &self,
+        user_id: Uuid,
+        record: fckn_gay_user_database_interface::DnsRecord,
+        provider_key: String,
+    ) -> Result<DnsRecordId, Self::Error> {
+        match self {
+            Database::Dummy(db) => db
+                .add_dns_record(user_id, record, provider_key)
+                .await
+                .map_err(Self::Error::Dummy),
+            Database::Csv(db) => db
+                .add_dns_record(user_id, record, provider_key)
+                .await
+                .map_err(Self::Error::Csv),
+            Database::Diesel(db) => db
+                .add_dns_record(user_id, record, provider_key)
+                .await
+                .map_err(Self::Error::Diesel),
+        }
+    }
+
+    async fn get_user_dns_records(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<fckn_gay_user_database_interface::DatabaseDnsRecord>, Self::Error> {
+        match self {
+            Database::Dummy(db) => db
+                .get_user_dns_records(user_id)
+                .await
+                .map_err(Self::Error::Dummy),
+            Database::Csv(db) => db
+                .get_user_dns_records(user_id)
+                .await
+                .map_err(Self::Error::Csv),
+            Database::Diesel(db) => db
+                .get_user_dns_records(user_id)
+                .await
+                .map_err(Self::Error::Diesel),
+        }
+    }
+
+    async fn update_dns_record(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+        record: fckn_gay_user_database_interface::DnsRecord,
+    ) -> Result<(), Self::Error> {
+        match self {
+            Database::Dummy(db) => db
+                .update_dns_record(user_id, record_id, record)
+                .await
+                .map_err(Self::Error::Dummy),
+            Database::Csv(db) => db
+                .update_dns_record(user_id, record_id, record)
+                .await
+                .map_err(Self::Error::Csv),
+            Database::Diesel(db) => db
+                .update_dns_record(user_id, record_id, record)
+                .await
+                .map_err(Self::Error::Diesel),
+        }
+    }
+
+        async fn delete_dns_record(
+            &self,
+            user_id: Uuid,
+            record_id: DnsRecordId,
+        ) -> Result<(), Self::Error> {
+            match self {
+                Database::Dummy(db) => db
+                    .delete_dns_record(user_id, record_id)
+                    .await
+                    .map_err(Self::Error::Dummy),
+                Database::Csv(db) => db
+                    .delete_dns_record(user_id, record_id)
+                    .await
+                    .map_err(Self::Error::Csv),
+                Database::Diesel(db) => db
+                    .delete_dns_record(user_id, record_id)
+                    .await
+                    .map_err(Self::Error::Diesel),
+            }
+        }
+
+        async fn get_dns_record_provider_key(
+            &self,
+            user_id: Uuid,
+            record_id: DnsRecordId,
+        ) -> Result<String, Self::Error> {
+            match self {
+                Database::Dummy(db) => db
+                    .get_dns_record_provider_key(user_id, record_id)
+                    .await
+                    .map_err(Self::Error::Dummy),
+                Database::Csv(db) => db
+                    .get_dns_record_provider_key(user_id, record_id)
+                    .await
+                    .map_err(Self::Error::Csv),
+                Database::Diesel(db) => db
+                    .get_dns_record_provider_key(user_id, record_id)
+                    .await
+                    .map_err(Self::Error::Diesel),
+            }
+        }
 }

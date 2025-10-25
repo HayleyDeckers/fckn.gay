@@ -1,5 +1,22 @@
+use std::fmt;
+
 use fckn_gay_dns_interface::{Dns, Record};
 use serde::Deserialize;
+
+#[derive(Debug)]
+pub enum Error {
+    RecordNotFound(usize),
+}
+
+impl std::error::Error for Error {}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::RecordNotFound(msg) => write!(f, "Record id not found: {}", msg),
+        }
+    }
+}
 
 /// configuration for the Porkbun DNS provider.
 #[derive(Debug, Deserialize)]
@@ -16,7 +33,7 @@ pub struct DummyDns {
 
 impl Dns for DummyDns {
     type Config = Config;
-    type Error = std::convert::Infallible;
+    type Error = Error;
     type Key = usize;
 
     /// Creates a new instance of the DNS provider with the given configuration.
@@ -56,8 +73,10 @@ impl Dns for DummyDns {
         //todo: error if key is out of bounds
         if let Some(r) = entries.get_mut(key) {
             *r = None;
+            Ok(())
+        } else {
+            Err(Error::RecordNotFound(key))
         }
-        Ok(())
     }
 
     /// Lists all DNS records
@@ -68,5 +87,16 @@ impl Dns for DummyDns {
             .enumerate()
             .filter_map(|(i, r)| r.as_ref().map(|r| (i, r.clone())))
             .collect())
+    }
+
+    /// Updates a DNS record
+    async fn update_record(&self, key: Self::Key, record: Record) -> Result<(), Self::Error> {
+        let mut entries = self.entries.lock().await;
+        if let Some(entry) = entries.get_mut(key) {
+            *entry = Some(record);
+            Ok(())
+        } else {
+            Err(Error::RecordNotFound(key))
+        }
     }
 }
