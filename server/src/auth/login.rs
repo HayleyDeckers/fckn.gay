@@ -22,10 +22,14 @@ pub async fn login(
     jar: CookieJar,
     Form(form): Form<Login>,
 ) -> Result<CookieJar, StatusCode> {
-    if user_database.is_valid(&form.username, &form.password).await {
+    if let Some(user_id) = user_database
+        .validate_and_get_user_id(&form.username, &form.password)
+        .await
+    {
         let token = auth_cache
             .new_token_for(
                 form.username,
+                user_id,
                 Instant::now() + std::time::Duration::from_secs(60 * 60 * 4),
             )
             .await

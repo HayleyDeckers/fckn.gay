@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use fckn_gay_user_database_interface::{PasswordHash, UserDatabase, UserEntry, UserState, Uuid};
+use fckn_gay_user_database_interface::{
+    DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry, UserState, Uuid,
+};
 
 /// a simple user database parsed directly from the configuration file.
 ///
@@ -66,6 +68,15 @@ impl UserDatabase for Database {
             .any(|user| user.is_valid(username, password))
     }
 
+    async fn validate_and_get_user_id(&self, username: &str, password: &str) -> Option<Uuid> {
+        self.users
+            .lock()
+            .await
+            .iter()
+            .find(|user| user.is_valid(username, password))
+            .map(|user| user.id)
+    }
+
     /// Checks if a user is available for registration.
     async fn is_available(&self, username: &str) -> bool {
         !self
@@ -112,5 +123,56 @@ impl UserDatabase for Database {
             return Ok(());
         }
         Err(Error::UserNotFound)
+    }
+
+    #[allow(unused_variables)]
+    async fn get_user_dns_records(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<fckn_gay_user_database_interface::DatabaseDnsRecord>, Self::Error> {
+        // Dummy implementation - return empty list
+        Ok(vec![])
+    }
+
+    #[allow(unused_variables)]
+    async fn add_dns_record(
+        &self,
+        user_id: Uuid,
+        record: DnsRecord,
+        provider_key: String,
+    ) -> Result<DnsRecordId, Self::Error> {
+        // Dummy implementation - generate a random ID
+        let record_id = DnsRecordId(uuid::Uuid::new_v4());
+        Ok(record_id)
+    }
+
+    #[allow(unused_variables)]
+    async fn update_dns_record(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+        record: DnsRecord,
+    ) -> Result<(), Self::Error> {
+        // Dummy implementation - do nothing
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
+    async fn delete_dns_record(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+    ) -> Result<(), Self::Error> {
+        // Dummy implementation - do nothing
+        Ok(())
+    }
+
+    async fn get_dns_record_provider_key(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+    ) -> Result<String, Self::Error> {
+        // Dummy implementation - return a dummy key
+        Ok(format!("dummy_key_{}", record_id.0))
     }
 }

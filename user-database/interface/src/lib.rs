@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 pub use uuid::Uuid;
 
 #[derive(Debug)]
@@ -58,7 +59,7 @@ impl UserEntry {
 }
 
 // DNS record types for user-database
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DnsRecordId(pub Uuid);
 
 impl DnsRecordId {
@@ -82,6 +83,14 @@ impl From<DnsRecordId> for Uuid {
 // Re-export DNS types for convenience
 pub use fckn_gay_dns_interface::{Record as DnsRecord, RecordType as DnsRecordType};
 
+/// A DNS record as stored in the database, including metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseDnsRecord {
+    pub id: DnsRecordId,
+    pub provider_key: String,
+    pub record: DnsRecord,
+}
+
 // alternatively to this, would it be better to use a raw trait for "add entry"
 // and a "add user" wrapper that is "check and add user"
 pub enum Error<E> {
@@ -102,6 +111,13 @@ pub trait UserDatabase {
         Self: Sized;
     /// Checks if a user exists in the database with the given username and password.
     fn is_valid(&self, username: &str, password: &str) -> impl Future<Output = bool>;
+
+    /// Validates user credentials and returns the user ID if valid.
+    fn validate_and_get_user_id(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> impl Future<Output = Option<Uuid>>;
 
     /// Checks if a user is available for registration.
     fn is_available(&self, username: &str) -> impl Future<Output = bool>;
@@ -129,11 +145,12 @@ pub trait UserDatabase {
 
     // DNS record management methods
     #[allow(unused_variables)]
-    /// Adds a DNS record for the given user.
+    /// Adds a DNS record for the given user with the provider key.
     fn add_dns_record(
         &self,
         user_id: Uuid,
         record: DnsRecord,
+        provider_key: String,
     ) -> impl Future<Output = Result<DnsRecordId, Self::Error>> {
         async { todo!("add_dns_record is not implemented") }
     }
@@ -143,7 +160,7 @@ pub trait UserDatabase {
     fn get_user_dns_records(
         &self,
         user_id: Uuid,
-    ) -> impl Future<Output = Result<Vec<DnsRecord>, Self::Error>> {
+    ) -> impl Future<Output = Result<Vec<DatabaseDnsRecord>, Self::Error>> {
         async { todo!("get_user_dns_records is not implemented") }
     }
 
@@ -166,5 +183,15 @@ pub trait UserDatabase {
         record_id: DnsRecordId,
     ) -> impl Future<Output = Result<(), Self::Error>> {
         async { todo!("delete_dns_record is not implemented") }
+    }
+
+    #[allow(unused_variables)]
+    /// Gets the provider key for a specific DNS record (verifies user ownership).
+    fn get_dns_record_provider_key(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+    ) -> impl Future<Output = Result<String, Self::Error>> {
+        async { todo!("get_dns_record_provider_key is not implemented") }
     }
 }

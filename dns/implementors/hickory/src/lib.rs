@@ -89,6 +89,20 @@ impl Database {
         let mut records = self.records.write().await;
         records.remove(&NonZeroU64::new(id).unwrap())
     }
+
+    async fn update_record(&self, id: u64, record: HickoryRecord) -> Option<HickoryRecord> {
+        let mut records = self.records.write().await;
+        if let Some(id) = NonZeroU64::new(id) {
+            if records.contains_key(&id) {
+                records.insert(id, record.clone());
+                Some(record)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 
 struct FileBacked {
@@ -262,6 +276,19 @@ impl Dns for HickoryDns {
             .iter()
             .map(|(id, record)| (id.get(), record_from_hickory_record(record)))
             .collect())
+    }
+
+    async fn update_record(&self, key: Self::Key, record: Record) -> Result<(), Self::Error> {
+        let hickory_record = hickory_record_from_record(record);
+        if self
+            .server_file
+            .update_record(key, hickory_record)
+            .await
+            .is_some()
+        {
+            self.server_file.save().await?;
+        }
+        Ok(())
     }
 }
 

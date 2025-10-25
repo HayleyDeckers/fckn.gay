@@ -7,25 +7,31 @@ use axum::{
     response::{Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
+use fckn_gay_user_database::Uuid;
 use tokio::sync::RwLock;
 
 pub struct LoginToken {
     expires_at: Instant,
-    user_id: String,
+    username: String,
+    user_id: Uuid,
 }
 
 impl LoginToken {
-    fn new(expires_at: Instant, user_id: String) -> Self {
+    fn new(expires_at: Instant, username: String, user_id: Uuid) -> Self {
         Self {
             expires_at,
+            username,
             user_id,
         }
     }
     fn is_valid(&self) -> bool {
         self.expires_at > Instant::now()
     }
-    fn user_id(&self) -> &str {
-        &self.user_id
+    fn username(&self) -> &str {
+        &self.username
+    }
+    fn user_id(&self) -> Uuid {
+        self.user_id
     }
 }
 
@@ -41,11 +47,17 @@ impl AuthenticationCache {
         }
     }
 
-    pub async fn add_token(&self, token: String, user_id: String, expires_at: Instant) {
+    pub async fn add_token(
+        &self,
+        token: String,
+        username: String,
+        user_id: Uuid,
+        expires_at: Instant,
+    ) {
         self.db
             .write()
             .await
-            .insert(token, LoginToken::new(expires_at, user_id));
+            .insert(token, LoginToken::new(expires_at, username, user_id));
     }
 
     pub async fn remove_token(&self, token: &str) -> Option<LoginToken> {
@@ -53,21 +65,27 @@ impl AuthenticationCache {
         wlock.remove(token)
     }
 
-    pub async fn new_token_for(&self, user_id: String, expires_at: Instant) -> Option<String> {
+    pub async fn new_token_for(
+        &self,
+        username: String,
+        user_id: Uuid,
+        expires_at: Instant,
+    ) -> Option<String> {
         let (Ok(hi), Ok(lo)) = (getrandom::u64(), getrandom::u64()) else {
             return None;
         };
         let token = format!("{hi:016x}{lo:016x}");
-        self.add_token(token.clone(), user_id, expires_at).await;
+        self.add_token(token.clone(), username, user_id, expires_at)
+            .await;
         Some(token)
     }
 
-    pub async fn get_user_id_from_token(&self, token: &str) -> Option<String> {
+    pub async fn get_user_from_token(&self, token: &str) -> Option<(String, Uuid)> {
         let should_remove = {
             let rlock = self.db.read().await;
             let value = rlock.get(token);
             if value.is_some_and(LoginToken::is_valid) {
-                return value.map(|v| v.user_id().to_string());
+                return value.map(|v| (v.username().to_string(), v.user_id()));
             }
             value.is_some()
         };
@@ -79,14 +97,22 @@ impl AuthenticationCache {
 }
 
 #[derive(Clone, Debug)]
-pub struct AuthenticatedFor(Arc<String>);
+pub struct AuthenticatedFor {
+    username: String,
+    user_id: Uuid,
+}
+
 impl AuthenticatedFor {
-    pub fn new(user_id: String) -> Self {
-        Self(Arc::new(user_id))
+    pub fn new(username: String, user_id: Uuid) -> Self {
+        Self { username, user_id }
     }
 
-    pub fn user_id(&self) -> &str {
-        self.0.as_str()
+    pub fn username(&self) -> &str {
+        &self.username
+    }
+
+    pub fn user_id(&self) -> Uuid {
+        self.user_id
     }
 }
 
@@ -100,11 +126,11 @@ pub async fn add_authorization(state: &AuthenticationCache, request: &mut Reques
         // we don't care about the cookie domain, path, etc.
         // those are for the browser to care about
         let token = cookie.value();
-        if let Some(authorized_for) = state.get_user_id_from_token(token).await {
-            println!("User {authorized_for} authorized with token {token}");
+        if let Some((username, user_id)) = state.get_user_from_token(token).await {
+            println!("User {username} (ID: {user_id}) authorized with token {token}");
             request
                 .extensions_mut()
-                .insert(AuthenticatedFor::new(authorized_for));
+                .insert(AuthenticatedFor::new(username, user_id));
             return true;
         }
     }

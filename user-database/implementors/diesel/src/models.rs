@@ -60,7 +60,7 @@ pub struct NewUser<'a> {
 }
 
 // DNS Record Models
-#[derive(Queryable, Selectable, Debug)]
+#[derive(Queryable, Selectable, Debug, Clone)]
 #[diesel(table_name = crate::schema::dns_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct RawDnsRecord {

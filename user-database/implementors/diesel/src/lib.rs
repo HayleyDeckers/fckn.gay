@@ -2,7 +2,7 @@ mod models;
 mod schema;
 use diesel::prelude::*;
 use fckn_gay_user_database_interface::{
-    DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry,
+    DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry, Uuid,
 };
 
 #[derive(serde::Deserialize)]
@@ -46,6 +46,21 @@ impl UserDatabase for Database {
         };
         let user = UserEntry::from(user);
         user.is_valid(username, password)
+    }
+
+    async fn validate_and_get_user_id(&self, username: &str, password: &str) -> Option<Uuid> {
+        let Ok(user) = crate::schema::users::dsl::users
+            .filter(crate::schema::users::username.eq(username))
+            .first::<models::RawUser>(&mut *self.connection.lock().await)
+        else {
+            return None;
+        };
+        let user = UserEntry::from(user);
+        if user.is_valid(username, password) {
+            Some(user.id)
+        } else {
+            None
+        }
     }
     // this should just be part of add user with a specific error shared between impls
     async fn is_available(&self, username: &str) -> bool {
@@ -117,12 +132,16 @@ impl UserDatabase for Database {
         &self,
         user_id: fckn_gay_user_database_interface::Uuid,
         record: DnsRecord,
+        provider_key: String,
     ) -> Result<DnsRecordId, Self::Error> {
         use self::schema::dns_records::dsl::dns_records;
         let record_id = DnsRecordId::new();
-        let provider_key = "dummy_key"; // TODO: This should come from the DNS provider
-        let new_record =
-            models::NewDnsRecord::from_interface(record_id.clone(), user_id, &record, provider_key);
+        let new_record = models::NewDnsRecord::from_interface(
+            record_id.clone(),
+            user_id,
+            &record,
+            &provider_key,
+        );
 
         let mut conn = self.connection.lock().await;
         diesel::insert_into(dns_records)
@@ -134,7 +153,7 @@ impl UserDatabase for Database {
     async fn get_user_dns_records(
         &self,
         user_id: fckn_gay_user_database_interface::Uuid,
-    ) -> Result<Vec<DnsRecord>, Self::Error> {
+    ) -> Result<Vec<fckn_gay_user_database_interface::DatabaseDnsRecord>, Self::Error> {
         use self::schema::dns_records::dsl::dns_records;
         let mut conn = self.connection.lock().await;
         let user_bytes = user_id.to_bytes_le();
@@ -142,7 +161,18 @@ impl UserDatabase for Database {
             .filter(schema::dns_records::user_id.eq(&user_bytes))
             .load::<models::RawDnsRecord>(&mut *conn)?;
 
-        Ok(raw_records.into_iter().map(DnsRecord::from).collect())
+        Ok(raw_records
+            .into_iter()
+            .map(|raw| {
+                let record_id = DnsRecordId::from(raw.clone());
+                let record = DnsRecord::from(raw.clone());
+                fckn_gay_user_database_interface::DatabaseDnsRecord {
+                    id: record_id,
+                    provider_key: raw.provider_key,
+                    record,
+                }
+            })
+            .collect())
     }
 
     async fn update_dns_record(
@@ -207,5 +237,26 @@ impl UserDatabase for Database {
             ));
         }
         Ok(())
+    }
+
+    async fn get_dns_record_provider_key(
+        &self,
+        user_id: fckn_gay_user_database_interface::Uuid,
+        record_id: DnsRecordId,
+    ) -> Result<String, Self::Error> {
+        use self::schema::dns_records::dsl::dns_records;
+        let user_bytes = user_id.to_bytes_le();
+        let record_bytes = record_id.0.to_bytes_le();
+
+        let record = dns_records
+            .filter(
+                schema::dns_records::id
+                    .eq(&record_bytes)
+                    .and(schema::dns_records::user_id.eq(&user_bytes)),
+            )
+            .select(schema::dns_records::provider_key)
+            .first::<String>(&mut *self.connection.lock().await)?;
+
+        Ok(record)
     }
 }

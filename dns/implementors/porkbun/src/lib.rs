@@ -189,4 +189,12 @@ impl Dns for PorkbunDns {
             })
             .collect())
     }
+
+    /// Updates a DNS record
+    async fn update_record(&self, key: Self::Key, record: Record) -> Result<(), Self::Error> {
+        // TODO: Implement update_record for Porkbun provider
+        Err(Error::Other(
+            "update_record not implemented for Porkbun provider".to_string(),
+        ))
+    }
 }
