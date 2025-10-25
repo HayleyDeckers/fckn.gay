@@ -125,12 +125,9 @@ impl FileBacked {
         let records = LockedRecords {
             records: self.data.records.read().await,
         };
-        file.write_all(
-            toml::to_string(&records)
-                .map_err(std::io::Error::other)?
-                .as_bytes(),
-        )
-        .await?;
+        let contents = toml::to_string(&records).map_err(std::io::Error::other)?;
+        file.write_all(contents.as_bytes()).await?;
+        file.set_len(contents.len() as u64).await?;
         file.flush().await?;
         Ok(())
     }
