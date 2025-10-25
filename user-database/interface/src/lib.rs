@@ -57,11 +57,37 @@ impl UserEntry {
     }
 }
 
+// DNS record types for user-database
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnsRecordId(pub Uuid);
+
+impl DnsRecordId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
+impl From<Uuid> for DnsRecordId {
+    fn from(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+impl From<DnsRecordId> for Uuid {
+    fn from(id: DnsRecordId) -> Self {
+        id.0
+    }
+}
+
+// Re-export DNS types for convenience
+pub use fckn_gay_dns_interface::{Record as DnsRecord, RecordType as DnsRecordType};
+
 // alternatively to this, would it be better to use a raw trait for "add entry"
 // and a "add user" wrapper that is "check and add user"
 pub enum Error<E> {
     UserExists,
     UserNotFound,
+    RecordNotFound,
     ImplementorError(E),
 }
 
@@ -99,5 +125,46 @@ pub trait UserDatabase {
     #[allow(unused_variables)]
     fn activate_user(&self, uuid: Uuid) -> impl Future<Output = Result<(), Self::Error>> {
         async { todo!("activate_user is not implemented") }
+    }
+
+    // DNS record management methods
+    #[allow(unused_variables)]
+    /// Adds a DNS record for the given user.
+    fn add_dns_record(
+        &self,
+        user_id: Uuid,
+        record: DnsRecord,
+    ) -> impl Future<Output = Result<DnsRecordId, Self::Error>> {
+        async { todo!("add_dns_record is not implemented") }
+    }
+
+    #[allow(unused_variables)]
+    /// Gets all DNS records for the given user.
+    fn get_user_dns_records(
+        &self,
+        user_id: Uuid,
+    ) -> impl Future<Output = Result<Vec<DnsRecord>, Self::Error>> {
+        async { todo!("get_user_dns_records is not implemented") }
+    }
+
+    #[allow(unused_variables)]
+    /// Updates a DNS record (verifies user ownership).
+    fn update_dns_record(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+        record: DnsRecord,
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        async { todo!("update_dns_record is not implemented") }
+    }
+
+    #[allow(unused_variables)]
+    /// Deletes a DNS record (verifies user ownership).
+    fn delete_dns_record(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        async { todo!("delete_dns_record is not implemented") }
     }
 }
