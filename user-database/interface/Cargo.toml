@@ -8,8 +8,9 @@ publish = false
 workspace = true
 
 [dependencies]
+fckn-gay-dns-interface = { path = "../../dns/interface" }
+
 chrono.workspace = true
 password-auth.workspace = true
 serde.workspace = true
 uuid.workspace = true
-fckn-gay-dns-interface = { path = "../../dns/interface" }
