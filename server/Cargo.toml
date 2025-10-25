@@ -16,7 +16,7 @@ fckn-gay-validation.workspace = true
 
 # other dependencies
 anyhow.workspace = true
-axum = { workspace = true, features = ["form", "http1", "http2", "json", "macros", "tokio"] }
+axum = { workspace = true, features = ["form", "http1", "http2", "json", "tokio"] }
 axum-extra = { workspace = true, features = ["cookie"] }
 getrandom.workspace = true
 serde.workspace = true
