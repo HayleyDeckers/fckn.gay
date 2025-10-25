@@ -86,6 +86,101 @@ impl FromStr for RecordType {
     }
 }
 
+impl From<RecordType> for i32 {
+    fn from(record_type: RecordType) -> Self {
+        match record_type {
+            RecordType::A => 0,
+            RecordType::MX => 1,
+            RecordType::CNAME => 2,
+            RecordType::ALIAS => 3,
+            RecordType::TXT => 4,
+            RecordType::NS => 5,
+            RecordType::AAAA => 6,
+            RecordType::SRV => 7,
+            RecordType::TLSA => 8,
+            RecordType::CAA => 9,
+            RecordType::HTTPS => 10,
+            RecordType::SVCB => 11,
+        }
+    }
+}
+
+impl TryFrom<i32> for RecordType {
+    type Error = i32;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(RecordType::A),
+            1 => Ok(RecordType::MX),
+            2 => Ok(RecordType::CNAME),
+            3 => Ok(RecordType::ALIAS),
+            4 => Ok(RecordType::TXT),
+            5 => Ok(RecordType::NS),
+            6 => Ok(RecordType::AAAA),
+            7 => Ok(RecordType::SRV),
+            8 => Ok(RecordType::TLSA),
+            9 => Ok(RecordType::CAA),
+            10 => Ok(RecordType::HTTPS),
+            11 => Ok(RecordType::SVCB),
+            _ => Err(value),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_record_type_roundtrip() {
+        let all_variants = [
+            RecordType::A,
+            RecordType::MX,
+            RecordType::CNAME,
+            RecordType::ALIAS,
+            RecordType::TXT,
+            RecordType::NS,
+            RecordType::AAAA,
+            RecordType::SRV,
+            RecordType::TLSA,
+            RecordType::CAA,
+            RecordType::HTTPS,
+            RecordType::SVCB,
+        ];
+
+        for variant in all_variants {
+            let int_value = i32::from(variant);
+            let back_to_variant = RecordType::try_from(int_value).expect("roundtrip should work");
+            assert_eq!(
+                variant, back_to_variant,
+                "RecordType {:?} should roundtrip through integer {}",
+                variant, int_value
+            );
+        }
+    }
+
+    #[test]
+    fn test_invalid_record_type() {
+        // 12 should be the next value after the last valid value
+        // so always test for that here.
+        let invalid_values = [-1, 12, 999, i32::MAX, i32::MIN];
+
+        for invalid_value in invalid_values {
+            let result = RecordType::try_from(invalid_value);
+            assert!(
+                result.is_err(),
+                "Invalid value {} should return error",
+                invalid_value
+            );
+            assert_eq!(
+                result.unwrap_err(),
+                invalid_value,
+                "Error should contain the invalid value"
+            );
+        }
+    }
+}
+
 impl Display for Record {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
