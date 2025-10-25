@@ -764,6 +764,7 @@ name = "fckn-gay-user-database-interface"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "fckn-gay-dns-interface",
  "password-auth",
  "serde",
  "uuid",

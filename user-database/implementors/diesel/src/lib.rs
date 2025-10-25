@@ -1,7 +1,9 @@
 mod models;
 mod schema;
 use diesel::prelude::*;
-use fckn_gay_user_database_interface::{PasswordHash, UserDatabase, UserEntry};
+use fckn_gay_user_database_interface::{
+    DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry,
+};
 
 #[derive(serde::Deserialize)]
 pub struct Config {
@@ -35,10 +37,9 @@ impl UserDatabase for Database {
     }
 
     async fn is_valid(&self, username: &str, password: &str) -> bool {
-        let mut conn = self.connection.lock().await;
         let Ok(user) = crate::schema::users::dsl::users
             .filter(crate::schema::users::username.eq(username))
-            .first::<models::RawUser>(&mut *conn)
+            .first::<models::RawUser>(&mut *self.connection.lock().await)
         else {
             //todo: handle errors
             return false;
@@ -48,11 +49,10 @@ impl UserDatabase for Database {
     }
     // this should just be part of add user with a specific error shared between impls
     async fn is_available(&self, username: &str) -> bool {
-        let mut conn = self.connection.lock().await;
         match crate::schema::users::dsl::users
             .count()
             .filter(crate::schema::users::username.eq(username))
-            .first::<i64>(&mut *conn)
+            .first::<i64>(&mut *self.connection.lock().await)
         {
             Ok(0) => true,
             Ok(_) => false,
@@ -79,11 +79,10 @@ impl UserDatabase for Database {
             email,
             password_hash: password_hash.as_str(),
         };
-        let mut conn = self.connection.lock().await;
         // todo: test this errors correctly on duplicate username
         diesel::insert_into(users)
             .values(new_user)
-            .execute(&mut *conn)?;
+            .execute(&mut *self.connection.lock().await)?;
         Ok(id)
     }
 
@@ -92,13 +91,12 @@ impl UserDatabase for Database {
         uuid: fckn_gay_user_database_interface::Uuid,
     ) -> Result<(), Self::Error> {
         use self::schema::users::dsl::{state, users};
-        let mut conn = self.connection.lock().await;
         let bytes = uuid.to_bytes_le();
         let updated = diesel::update(
             users.filter(schema::users::id.eq(&bytes).and(schema::users::state.eq(0))),
         )
         .set(state.eq(1)) // 1 is active
-        .execute(&mut *conn)?;
+        .execute(&mut *self.connection.lock().await)?;
         if updated == 0 {
             Err(Error::Other("User not found or not pending".to_string()))
         } else {
@@ -109,8 +107,105 @@ impl UserDatabase for Database {
     //todo: should be per uuid probably
     async fn delete_user(&self, username: &str) -> Result<(), Self::Error> {
         use self::schema::users::dsl::users;
+        diesel::delete(users.filter(schema::users::username.eq(username)))
+            .execute(&mut *self.connection.lock().await)?;
+        Ok(())
+    }
+
+    // DNS record management methods
+    async fn add_dns_record(
+        &self,
+        user_id: fckn_gay_user_database_interface::Uuid,
+        record: DnsRecord,
+    ) -> Result<DnsRecordId, Self::Error> {
+        use self::schema::dns_records::dsl::dns_records;
+        let record_id = DnsRecordId::new();
+        let provider_key = "dummy_key"; // TODO: This should come from the DNS provider
+        let new_record =
+            models::NewDnsRecord::from_interface(record_id.clone(), user_id, &record, provider_key);
+
         let mut conn = self.connection.lock().await;
-        diesel::delete(users.filter(schema::users::username.eq(username))).execute(&mut *conn)?;
+        diesel::insert_into(dns_records)
+            .values(new_record)
+            .execute(&mut *conn)?;
+        Ok(record_id)
+    }
+
+    async fn get_user_dns_records(
+        &self,
+        user_id: fckn_gay_user_database_interface::Uuid,
+    ) -> Result<Vec<DnsRecord>, Self::Error> {
+        use self::schema::dns_records::dsl::dns_records;
+        let mut conn = self.connection.lock().await;
+        let user_bytes = user_id.to_bytes_le();
+        let raw_records = dns_records
+            .filter(schema::dns_records::user_id.eq(&user_bytes))
+            .load::<models::RawDnsRecord>(&mut *conn)?;
+
+        Ok(raw_records.into_iter().map(DnsRecord::from).collect())
+    }
+
+    async fn update_dns_record(
+        &self,
+        user_id: fckn_gay_user_database_interface::Uuid,
+        record_id: DnsRecordId,
+        record: DnsRecord,
+    ) -> Result<(), Self::Error> {
+        use self::schema::dns_records::dsl::{
+            content, dns_records, name, priority, record_type, ttl_seconds,
+        };
+        let user_bytes = user_id.to_bytes_le();
+        let record_bytes = record_id.0.to_bytes_le();
+
+        // Update with ownership check in a single query
+        let updated = diesel::update(
+            dns_records.filter(
+                schema::dns_records::id
+                    .eq(&record_bytes)
+                    .and(schema::dns_records::user_id.eq(&user_bytes)),
+            ),
+        )
+        .set((
+            name.eq(&record.name),
+            record_type.eq(i32::from(record.record_type)),
+            content.eq(&record.content),
+            ttl_seconds.eq(record.ttl_seconds as i32),
+            priority.eq(record.priority.map(|p| p as i32)),
+        ))
+        .execute(&mut *self.connection.lock().await)?;
+
+        if updated == 0 {
+            return Err(Error::Other(
+                "Record not found or user does not own it".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn delete_dns_record(
+        &self,
+        user_id: fckn_gay_user_database_interface::Uuid,
+        record_id: DnsRecordId,
+    ) -> Result<(), Self::Error> {
+        use self::schema::dns_records::dsl::dns_records;
+        let user_bytes = user_id.to_bytes_le();
+        let record_bytes = record_id.0.to_bytes_le();
+
+        // Delete with ownership check in a single query
+        let deleted = diesel::delete(
+            dns_records.filter(
+                schema::dns_records::id
+                    .eq(&record_bytes)
+                    .and(schema::dns_records::user_id.eq(&user_bytes)),
+            ),
+        )
+        .execute(&mut *self.connection.lock().await)?;
+
+        if deleted == 0 {
+            return Err(Error::Other(
+                "Record not found or user does not own it".to_string(),
+            ));
+        }
         Ok(())
     }
 }
