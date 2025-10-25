@@ -81,6 +81,14 @@ async fn delete_record(
             )
         })?;
 
+    // Convert string provider key to the appropriate Key type
+    let dns_key = provider_key.parse().map_err(|e| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            anyhow::anyhow!("Failed to parse provider key: {}", e),
+        )
+    })?;
+
     // Step 1: Delete from database first
     interfaces
         .user_database
@@ -93,13 +101,6 @@ async fn delete_record(
             )
         })?;
 
-    // Convert string provider key to the appropriate Key type
-    let dns_key = provider_key.parse().map_err(|e| {
-        AppError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            anyhow::anyhow!("Failed to parse provider key: {}", e),
-        )
-    })?;
     // Step 2: Delete from DNS provider
     match interfaces.dns.delete_record(dns_key).await {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
