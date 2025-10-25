@@ -190,7 +190,7 @@ impl Interfaces {
         // Filter database records to only those that should be in the current provider
         let current_provider_records: Vec<_> = db_records
             .into_iter()
-            .filter(|record| record.provider_key.starts_with(&current_provider))
+            .filter(|record| record.provider_key.starts_with(current_provider))
             .collect();
 
         println!(
@@ -242,7 +242,7 @@ impl Interfaces {
         // todo: handle the case where a record exists in the database but is not assigned to the current provider
         let provider_only_records: Vec<_> = provider_records
             .iter()
-            .filter(|(_, record)| !db_records.into_iter().any(|db| db.record == *record))
+            .filter(|(_, record)| !db_records.iter().any(|db| db.record == *record))
             .collect();
 
         if provider_only_records.is_empty() {
