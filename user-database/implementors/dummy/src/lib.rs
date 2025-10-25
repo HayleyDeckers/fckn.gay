@@ -167,6 +167,7 @@ impl UserDatabase for Database {
         Ok(())
     }
 
+    #[expect(unused_variables)]
     async fn get_dns_record_provider_key(
         &self,
         user_id: Uuid,

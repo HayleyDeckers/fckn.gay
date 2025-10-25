@@ -190,6 +190,7 @@ impl Dns for PorkbunDns {
             .collect())
     }
 
+    #[allow(unused_variables)]
     /// Updates a DNS record
     async fn update_record(&self, key: Self::Key, record: Record) -> Result<(), Self::Error> {
         // TODO: Implement update_record for Porkbun provider

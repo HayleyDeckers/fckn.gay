@@ -106,24 +106,16 @@ impl std::str::FromStr for Key {
             return Err(String::from("Invalid key format"));
         };
         match provider {
-            "Porkbun" => {
-                return Ok(Key::Porkbun(
-                    key.parse().map_err(|e| format!("Invalid key {key}: {e}"))?,
-                ));
-            }
-            "Dummy" => {
-                return Ok(Key::Dummy(
-                    key.parse().map_err(|e| format!("Invalid key {key}: {e}"))?,
-                ));
-            }
-            "Hickory" => {
-                return Ok(Key::Hickory(
-                    key.parse().map_err(|e| format!("Invalid key {key}: {e}"))?,
-                ));
-            }
-            _ => {
-                return Err(String::from("Invalid provider"));
-            }
+            "Porkbun" => Ok(Key::Porkbun(
+                key.parse().map_err(|e| format!("Invalid key {key}: {e}"))?,
+            )),
+            "Dummy" => Ok(Key::Dummy(
+                key.parse().map_err(|e| format!("Invalid key {key}: {e}"))?,
+            )),
+            "Hickory" => Ok(Key::Hickory(
+                key.parse().map_err(|e| format!("Invalid key {key}: {e}"))?,
+            )),
+            _ => Err(String::from("Invalid provider")),
         }
     }
 }
@@ -134,7 +126,7 @@ impl<'de> Deserialize<'de> for Key {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        Ok(s.parse().map_err(serde::de::Error::custom)?)
+        s.parse().map_err(serde::de::Error::custom)
     }
 }
 
