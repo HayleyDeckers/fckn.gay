@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, btree_map::Entry},
     io::Read,
     net::SocketAddr,
     num::NonZeroU64,
@@ -92,13 +92,9 @@ impl Database {
 
     async fn update_record(&self, id: u64, record: HickoryRecord) -> Option<HickoryRecord> {
         let mut records = self.records.write().await;
-        if let Some(id) = NonZeroU64::new(id) {
-            if records.contains_key(&id) {
-                records.insert(id, record.clone());
-                Some(record)
-            } else {
-                None
-            }
+        if let Entry::Occupied(mut e) = records.entry(NonZeroU64::new(id)?) {
+            *e.get_mut() = record.clone();
+            Some(record)
         } else {
             None
         }

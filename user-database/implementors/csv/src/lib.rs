@@ -58,6 +58,7 @@ impl UserDatabase for Database {
         !self.users.iter().any(|(user, _)| user == username)
     }
 
+    #[expect(unused_variables)]
     async fn add_dns_record(
         &self,
         user_id: Uuid,
@@ -68,6 +69,7 @@ impl UserDatabase for Database {
         Ok(DnsRecordId::new())
     }
 
+    #[expect(unused_variables)]
     async fn get_user_dns_records(
         &self,
         user_id: Uuid,
@@ -76,6 +78,7 @@ impl UserDatabase for Database {
         Ok(vec![])
     }
 
+    #[expect(unused_variables)]
     async fn update_dns_record(
         &self,
         user_id: Uuid,
@@ -86,6 +89,7 @@ impl UserDatabase for Database {
         Ok(())
     }
 
+    #[expect(unused_variables)]
     async fn delete_dns_record(
         &self,
         user_id: Uuid,
@@ -95,6 +99,7 @@ impl UserDatabase for Database {
         Ok(())
     }
 
+    #[expect(unused_variables)]
     async fn get_dns_record_provider_key(
         &self,
         user_id: Uuid,

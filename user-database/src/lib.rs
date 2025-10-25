@@ -236,45 +236,45 @@ impl Interface for Database {
         }
     }
 
-        async fn delete_dns_record(
-            &self,
-            user_id: Uuid,
-            record_id: DnsRecordId,
-        ) -> Result<(), Self::Error> {
-            match self {
-                Database::Dummy(db) => db
-                    .delete_dns_record(user_id, record_id)
-                    .await
-                    .map_err(Self::Error::Dummy),
-                Database::Csv(db) => db
-                    .delete_dns_record(user_id, record_id)
-                    .await
-                    .map_err(Self::Error::Csv),
-                Database::Diesel(db) => db
-                    .delete_dns_record(user_id, record_id)
-                    .await
-                    .map_err(Self::Error::Diesel),
-            }
+    async fn delete_dns_record(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+    ) -> Result<(), Self::Error> {
+        match self {
+            Database::Dummy(db) => db
+                .delete_dns_record(user_id, record_id)
+                .await
+                .map_err(Self::Error::Dummy),
+            Database::Csv(db) => db
+                .delete_dns_record(user_id, record_id)
+                .await
+                .map_err(Self::Error::Csv),
+            Database::Diesel(db) => db
+                .delete_dns_record(user_id, record_id)
+                .await
+                .map_err(Self::Error::Diesel),
         }
+    }
 
-        async fn get_dns_record_provider_key(
-            &self,
-            user_id: Uuid,
-            record_id: DnsRecordId,
-        ) -> Result<String, Self::Error> {
-            match self {
-                Database::Dummy(db) => db
-                    .get_dns_record_provider_key(user_id, record_id)
-                    .await
-                    .map_err(Self::Error::Dummy),
-                Database::Csv(db) => db
-                    .get_dns_record_provider_key(user_id, record_id)
-                    .await
-                    .map_err(Self::Error::Csv),
-                Database::Diesel(db) => db
-                    .get_dns_record_provider_key(user_id, record_id)
-                    .await
-                    .map_err(Self::Error::Diesel),
-            }
+    async fn get_dns_record_provider_key(
+        &self,
+        user_id: Uuid,
+        record_id: DnsRecordId,
+    ) -> Result<String, Self::Error> {
+        match self {
+            Database::Dummy(db) => db
+                .get_dns_record_provider_key(user_id, record_id)
+                .await
+                .map_err(Self::Error::Dummy),
+            Database::Csv(db) => db
+                .get_dns_record_provider_key(user_id, record_id)
+                .await
+                .map_err(Self::Error::Csv),
+            Database::Diesel(db) => db
+                .get_dns_record_provider_key(user_id, record_id)
+                .await
+                .map_err(Self::Error::Diesel),
         }
+    }
 }
