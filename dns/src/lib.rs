@@ -8,7 +8,7 @@ pub use fckn_gay_dns_porkbun::PorkbunDns as Porkbun;
 pub use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Providers {
     Porkbun,
@@ -93,6 +93,224 @@ impl Dns {
             .or(self.hickory.as_ref())
             .ok_or(Error::MissingConfig("Hickory"))
     }
+
+    /// Returns the currently active provider type.
+    pub fn active_provider(&self) -> Providers {
+        match &self.active {
+            ActiveDns::Porkbun(_) => Providers::Porkbun,
+            ActiveDns::Dummy(_) => Providers::Dummy,
+            ActiveDns::Hickory(_) => Providers::Hickory,
+        }
+    }
+
+    /// Generic internal migrate function that works with any DNS provider as source.
+    ///
+    /// # Arguments
+    ///
+    /// * `source` - The source DNS provider to migrate from
+    /// * `key` - The key of the record to migrate
+    ///
+    /// # Returns
+    ///
+    /// A `MigrateState` indicating the result of the migration operation.
+    async fn migrate_internal<S>(&self, source: &S, key: <S as Interface>::Key) -> MigrateState
+    where
+        S: Interface,
+        <S as Interface>::Key: PartialEq,
+    {
+        // Get the record from source provider
+        let records = match source.list_records().await {
+            Ok(records) => records,
+            Err(e) => {
+                return MigrateState::NothingChanged(MigrateError::GetRecordFailed(Box::new(e)));
+            }
+        };
+
+        self.migrate_internal_from_list(source, key, &records).await
+    }
+
+    async fn migrate_internal_from_list<S>(
+        &self,
+        source: &S,
+        key: <S as Interface>::Key,
+        records: &[(<S as Interface>::Key, Record)],
+    ) -> MigrateState
+    where
+        S: Interface,
+        <S as Interface>::Key: PartialEq,
+    {
+        let record = match records
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, record)| record)
+        {
+            Some(record) => record,
+            None => {
+                return MigrateState::NothingChanged(MigrateError::GetRecordFailed(Box::new(
+                    Error::RecordNotFound,
+                )));
+            }
+        };
+
+        // Add record to active provider
+        let new_key = match &self.active {
+            ActiveDns::Porkbun(active) => match active.add_record(record.clone()).await {
+                Ok(k) => Key::Porkbun(k),
+                Err(e) => {
+                    return MigrateState::NothingChanged(MigrateError::AddToActiveFailed(
+                        Error::Porkbun(e),
+                    ));
+                }
+            },
+            ActiveDns::Dummy(active) => match active.add_record(record.clone()).await {
+                Ok(k) => Key::Dummy(k),
+                Err(e) => {
+                    return MigrateState::NothingChanged(MigrateError::AddToActiveFailed(
+                        Error::Dummy(e),
+                    ));
+                }
+            },
+            ActiveDns::Hickory(active) => match active.add_record(record.clone()).await {
+                Ok(k) => Key::Hickory(k),
+                Err(e) => {
+                    return MigrateState::NothingChanged(MigrateError::AddToActiveFailed(
+                        Error::Hickory(e),
+                    ));
+                }
+            },
+        };
+
+        // Delete record from source provider
+        match source.delete_record(key).await {
+            Ok(()) => MigrateState::Success(new_key),
+            Err(e) => MigrateState::AddedButNotDeleted(
+                new_key,
+                MigrateError::DeleteFromSourceFailed(Box::new(e)),
+            ),
+        }
+    }
+
+    /// Migrates a DNS record from one provider to the active provider.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key of the record to migrate (must be from a different provider than the active one)
+    ///
+    /// # Returns
+    ///
+    /// A `MigrateState` indicating the result of the migration operation.
+    pub async fn migrate(&self, key: Key) -> MigrateState {
+        // Get active provider type
+        let active_provider = self.active_provider();
+
+        if matches!(
+            (active_provider, &key),
+            (Providers::Porkbun, Key::Porkbun(_))
+                | (Providers::Dummy, Key::Dummy(_))
+                | (Providers::Hickory, Key::Hickory(_))
+        ) {
+            return MigrateState::NothingChanged(MigrateError::SameProvider);
+        }
+
+        // Call the generic migrate function with the appropriate provider types
+        match key {
+            Key::Porkbun(inner_key) => {
+                let source = match self.porkbun() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return MigrateState::NothingChanged(MigrateError::GetRecordFailed(
+                            Box::new(e),
+                        ));
+                    }
+                };
+                self.migrate_internal(source, inner_key).await
+            }
+            Key::Dummy(inner_key) => {
+                let source = match self.dummy() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return MigrateState::NothingChanged(MigrateError::GetRecordFailed(
+                            Box::new(e),
+                        ));
+                    }
+                };
+                self.migrate_internal(source, inner_key).await
+            }
+            Key::Hickory(inner_key) => {
+                let source = match self.hickory() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return MigrateState::NothingChanged(MigrateError::GetRecordFailed(
+                            Box::new(e),
+                        ));
+                    }
+                };
+                self.migrate_internal(source, inner_key).await
+            }
+        }
+    }
+}
+
+/// State-based result of a migration operation.
+pub enum MigrateState {
+    /// Nothing changed - migration failed before any modifications.
+    NothingChanged(MigrateError),
+    /// Record was added to the active provider but deletion from source failed.
+    AddedButNotDeleted(Key, MigrateError),
+    /// Migration completed successfully.
+    Success(Key),
+}
+
+/// Error that tracks at what stage a migration failed.
+#[derive(Debug)]
+pub enum MigrateError {
+    /// Cannot migrate from the same provider.
+    SameProvider,
+    /// Failed to get the record from the source provider, nothing changed.
+    GetRecordFailed(Box<dyn std::error::Error + Send + Sync>),
+    /// Failed to add record to active provider, nothing changed.
+    AddToActiveFailed(Error),
+    /// Failed to delete record from source provider. Record exists in both source and active.
+    DeleteFromSourceFailed(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl std::fmt::Display for MigrateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MigrateError::SameProvider => {
+                write!(f, "Cannot migrate from the same provider.")
+            }
+            MigrateError::GetRecordFailed(_) => {
+                write!(
+                    f,
+                    "Failed to get record from source provider. Nothing changed."
+                )
+            }
+            MigrateError::AddToActiveFailed(_) => {
+                write!(
+                    f,
+                    "Failed to add record to active provider. Nothing changed."
+                )
+            }
+            MigrateError::DeleteFromSourceFailed(_) => {
+                write!(
+                    f,
+                    "Failed to delete record from source provider. Record still exists in both source and active."
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for MigrateError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            MigrateError::SameProvider => None,
+            MigrateError::GetRecordFailed(err) => err.source(),
+            MigrateError::AddToActiveFailed(err) => err.source(),
+            MigrateError::DeleteFromSourceFailed(err) => err.source(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -103,6 +321,8 @@ pub enum Error {
     MissingConfig(&'static str),
     CantChoseProvider,
     NoConfig,
+    SameProvider,
+    RecordNotFound,
 }
 
 impl std::fmt::Display for Error {
@@ -121,6 +341,8 @@ impl std::fmt::Display for Error {
                 )
             }
             Error::NoConfig => write!(f, "No configuration provided"),
+            Error::RecordNotFound => write!(f, "Record not found in source provider"),
+            Error::SameProvider => write!(f, "Cannot migrate from the same provider"),
         }
     }
 }
@@ -134,6 +356,8 @@ impl std::error::Error for Error {
             Error::MissingConfig(_) => None,
             Error::CantChoseProvider => None,
             Error::NoConfig => None,
+            Error::RecordNotFound => None,
+            Error::SameProvider => None,
         }
     }
 }
