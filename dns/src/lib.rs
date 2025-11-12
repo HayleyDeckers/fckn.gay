@@ -8,7 +8,7 @@ pub use fckn_gay_dns_porkbun::PorkbunDns as Porkbun;
 pub use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum Providers {
     Porkbun,
@@ -24,10 +24,75 @@ pub struct Config {
     hickory: Option<<Hickory as Interface>::Config>,
 }
 
-pub enum Dns {
+impl Config {
+    pub fn active(&self) -> Result<Providers, Error> {
+        if let Some(provider) = self.provider {
+            Ok(provider)
+        } else {
+            match (&self.porkbun, &self.dummy, &self.hickory) {
+                (Some(_), None, None) => Ok(Providers::Porkbun),
+                (None, Some(_), None) => Ok(Providers::Dummy),
+                (None, None, Some(_)) => Ok(Providers::Hickory),
+                (None, None, None) => Err(Error::NoConfig),
+                _ => Err(Error::CantChoseProvider),
+            }
+        }
+    }
+}
+
+pub enum ActiveDns {
     Porkbun(Porkbun),
     Dummy(Dummy),
     Hickory(Hickory),
+}
+
+impl ActiveDns {
+    pub fn porkbun(&self) -> Option<&Porkbun> {
+        match self {
+            ActiveDns::Porkbun(porkbun) => Some(porkbun),
+            _ => None,
+        }
+    }
+    pub fn dummy(&self) -> Option<&Dummy> {
+        match self {
+            ActiveDns::Dummy(dummy) => Some(dummy),
+            _ => None,
+        }
+    }
+    pub fn hickory(&self) -> Option<&Hickory> {
+        match self {
+            ActiveDns::Hickory(hickory) => Some(hickory),
+            _ => None,
+        }
+    }
+}
+
+pub struct Dns {
+    active: ActiveDns,
+    porkbun: Option<Porkbun>,
+    dummy: Option<Dummy>,
+    hickory: Option<Hickory>,
+}
+
+impl Dns {
+    pub fn porkbun(&self) -> Result<&Porkbun, Error> {
+        self.active
+            .porkbun()
+            .or(self.porkbun.as_ref())
+            .ok_or(Error::MissingConfig("Porkbun"))
+    }
+    pub fn dummy(&self) -> Result<&Dummy, Error> {
+        self.active
+            .dummy()
+            .or(self.dummy.as_ref())
+            .ok_or(Error::MissingConfig("Dummy"))
+    }
+    pub fn hickory(&self) -> Result<&Hickory, Error> {
+        self.active
+            .hickory()
+            .or(self.hickory.as_ref())
+            .ok_or(Error::MissingConfig("Hickory"))
+    }
 }
 
 #[derive(Debug)]
@@ -136,55 +201,85 @@ impl Interface for Dns {
     type Key = Key;
 
     fn new(config: Self::Config) -> Result<Self, Self::Error> {
-        if let Some(provider) = config.provider {
-            match provider {
-                Providers::Porkbun => {
-                    Porkbun::new(config.porkbun.ok_or(Error::MissingConfig("Porkbun"))?)
-                        .map(Dns::Porkbun)
-                        .map_err(Error::Porkbun)
-                }
-                Providers::Dummy => Dummy::new(config.dummy.ok_or(Error::MissingConfig("Dummy"))?)
-                    .map(Dns::Dummy)
-                    .map_err(Error::Dummy),
-                Providers::Hickory => {
-                    Hickory::new(config.hickory.ok_or(Error::MissingConfig("Hickory"))?)
-                        .map(Dns::Hickory)
-                        .map_err(Error::Hickory)
-                }
+        let active = config.active()?;
+
+        let mut porkbun = config.porkbun.map(Porkbun::new);
+        let mut dummy = config.dummy.map(Dummy::new);
+        let mut hickory = config.hickory.map(Hickory::new);
+
+        // set the active dns
+        let active = match active {
+            Providers::Porkbun => {
+                let porkbun = porkbun
+                    .take()
+                    .ok_or(Error::MissingConfig("Porkbun"))?
+                    .map_err(Error::Porkbun)?;
+                ActiveDns::Porkbun(porkbun)
             }
-        } else {
-            match (config.porkbun, config.dummy, config.hickory) {
-                (Some(porkbun), None, None) => Porkbun::new(porkbun)
-                    .map(Dns::Porkbun)
-                    .map_err(Error::Porkbun),
-                (None, Some(dummy), None) => {
-                    Dummy::new(dummy).map(Dns::Dummy).map_err(Error::Dummy)
-                }
-                (None, None, Some(hickory)) => Hickory::new(hickory)
-                    .map(Dns::Hickory)
-                    .map_err(Error::Hickory),
-                (None, None, None) => Err(Error::NoConfig),
-                _ => Err(Error::CantChoseProvider),
+            Providers::Dummy => {
+                let dummy = dummy
+                    .take()
+                    .ok_or(Error::MissingConfig("Dummy"))?
+                    .map_err(Error::Dummy)?;
+                ActiveDns::Dummy(dummy)
             }
-        }
+            Providers::Hickory => {
+                let hickory = hickory
+                    .take()
+                    .ok_or(Error::MissingConfig("Hickory"))?
+                    .map_err(Error::Hickory)?;
+                ActiveDns::Hickory(hickory)
+            }
+        };
+
+        let porkbun = match porkbun {
+            Some(Ok(porkbun)) => Some(porkbun),
+            Some(Err(e)) => {
+                eprintln!("Error creating DNS provider (Porkbun): {e}");
+                None
+            }
+            None => None,
+        };
+        let dummy = match dummy {
+            Some(Ok(dummy)) => Some(dummy),
+            Some(Err(e)) => {
+                eprintln!("Error creating DNS provider (Dummy): {e}");
+                None
+            }
+            None => None,
+        };
+        let hickory = match hickory {
+            Some(Ok(hickory)) => Some(hickory),
+            Some(Err(e)) => {
+                eprintln!("Error creating DNS provider (Hickory): {e}");
+                None
+            }
+            None => None,
+        };
+        Ok(Dns {
+            active,
+            porkbun,
+            dummy,
+            hickory,
+        })
     }
 
     async fn add_record(
         &self,
         record: fckn_gay_dns_interface::Record,
     ) -> Result<Self::Key, Self::Error> {
-        match self {
-            Dns::Porkbun(porkbun) => porkbun
+        match &self.active {
+            ActiveDns::Porkbun(porkbun) => porkbun
                 .add_record(record)
                 .await
                 .map(Key::Porkbun)
                 .map_err(Error::Porkbun),
-            Dns::Dummy(dummy) => dummy
+            ActiveDns::Dummy(dummy) => dummy
                 .add_record(record)
                 .await
                 .map(Key::Dummy)
                 .map_err(Error::Dummy),
-            Dns::Hickory(hickory) => hickory
+            ActiveDns::Hickory(hickory) => hickory
                 .add_record(record)
                 .await
                 .map(Key::Hickory)
@@ -193,19 +288,18 @@ impl Interface for Dns {
     }
 
     async fn delete_record(&self, key: Self::Key) -> Result<(), Self::Error> {
-        match (self, key) {
-            (Dns::Porkbun(porkbun), Key::Porkbun(porkbun_key)) => porkbun
+        match (&self.active, key) {
+            (ActiveDns::Porkbun(porkbun), Key::Porkbun(porkbun_key)) => porkbun
                 .delete_record(porkbun_key)
                 .await
                 .map_err(Error::Porkbun),
-            (Dns::Hickory(hickory), Key::Hickory(hickory_key)) => hickory
+            (ActiveDns::Hickory(hickory), Key::Hickory(hickory_key)) => hickory
                 .delete_record(hickory_key)
                 .await
                 .map_err(Error::Hickory),
-            (Dns::Dummy(dummy), Key::Dummy(dummy_key)) => {
+            (ActiveDns::Dummy(dummy), Key::Dummy(dummy_key)) => {
                 dummy.delete_record(dummy_key).await.map_err(Error::Dummy)
             }
-            #[allow(unreachable_patterns)]
             _ => panic!("Invalid key type for DNS provider"),
         }
     }
@@ -213,8 +307,8 @@ impl Interface for Dns {
     async fn list_records(
         &self,
     ) -> Result<Vec<(Self::Key, fckn_gay_dns_interface::Record)>, Self::Error> {
-        match self {
-            Dns::Porkbun(porkbun) => porkbun
+        match &self.active {
+            ActiveDns::Porkbun(porkbun) => porkbun
                 .list_records()
                 .await
                 .map(|records| {
@@ -224,7 +318,7 @@ impl Interface for Dns {
                         .collect()
                 })
                 .map_err(Error::Porkbun),
-            Dns::Dummy(dummy) => dummy
+            ActiveDns::Dummy(dummy) => dummy
                 .list_records()
                 .await
                 .map(|records| {
@@ -234,7 +328,7 @@ impl Interface for Dns {
                         .collect()
                 })
                 .map_err(Error::Dummy),
-            Dns::Hickory(hickory) => hickory
+            ActiveDns::Hickory(hickory) => hickory
                 .list_records()
                 .await
                 .map(|records| {
@@ -252,20 +346,19 @@ impl Interface for Dns {
         key: Self::Key,
         record: fckn_gay_dns_interface::Record,
     ) -> Result<(), Self::Error> {
-        match (self, key) {
-            (Dns::Porkbun(porkbun), Key::Porkbun(porkbun_key)) => porkbun
+        match (&self.active, key) {
+            (ActiveDns::Porkbun(porkbun), Key::Porkbun(porkbun_key)) => porkbun
                 .update_record(porkbun_key, record)
                 .await
                 .map_err(Error::Porkbun),
-            (Dns::Hickory(hickory), Key::Hickory(hickory_key)) => hickory
+            (ActiveDns::Hickory(hickory), Key::Hickory(hickory_key)) => hickory
                 .update_record(hickory_key, record)
                 .await
                 .map_err(Error::Hickory),
-            (Dns::Dummy(dummy), Key::Dummy(dummy_key)) => dummy
+            (ActiveDns::Dummy(dummy), Key::Dummy(dummy_key)) => dummy
                 .update_record(dummy_key, record)
                 .await
                 .map_err(Error::Dummy),
-            #[allow(unreachable_patterns)]
             _ => panic!("Invalid key type for DNS provider"),
         }
     }

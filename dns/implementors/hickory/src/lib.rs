@@ -226,7 +226,6 @@ impl Dns for HickoryDns {
         let database = file.data.clone();
         let mut server = ServerFuture::new(database);
         if let Some(tcp_addr) = config.tcp_addr {
-            println!("binding to tcp: {tcp_addr}");
             server
                 .register_listener_std(
                     std::net::TcpListener::bind(tcp_addr).unwrap(),
@@ -235,7 +234,6 @@ impl Dns for HickoryDns {
                 .unwrap();
         }
         if let Some(udp_addr) = config.udp_addr {
-            println!("binding to udp: {udp_addr}");
             server
                 .register_socket_std(std::net::UdpSocket::bind(udp_addr).unwrap())
                 .unwrap();
