@@ -1,5 +1,5 @@
 use core::panic;
-use std::fmt::Display;
+use std::{collections::BTreeMap, fmt::Display};
 
 pub use fckn_gay_dns_dummy::DummyDns as Dummy;
 pub use fckn_gay_dns_hickory::HickoryDns as Hickory;
@@ -8,7 +8,7 @@ pub use fckn_gay_dns_porkbun::PorkbunDns as Porkbun;
 pub use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum Providers {
     Porkbun,
@@ -249,6 +249,155 @@ impl Dns {
             }
         }
     }
+
+    /// Helper function to process keys for a specific provider.
+    async fn process_provider_keys<S>(
+        &self,
+        get_source: impl FnOnce(&Self) -> Result<&S, Error>,
+        keys: Vec<Key>,
+        extract_inner_key: impl Fn(&Key) -> Option<<S as Interface>::Key>,
+    ) -> ProviderMigrationResult
+    where
+        S: Interface,
+        <S as Interface>::Key: PartialEq,
+    {
+        let source = match get_source(self) {
+            Ok(source) => source,
+            Err(e) => {
+                let affected_count = keys.iter().filter_map(extract_inner_key).count();
+                return ProviderMigrationResult::FailedToInitialize {
+                    reason: MigrateError::GetRecordFailed(Box::new(e)),
+                    affected_count,
+                };
+            }
+        };
+
+        let records = match source.list_records().await {
+            Ok(records) => records,
+            Err(e) => {
+                let affected_count = keys.iter().filter_map(extract_inner_key).count();
+                return ProviderMigrationResult::FailedToInitialize {
+                    reason: MigrateError::GetRecordFailed(Box::new(e)),
+                    affected_count,
+                };
+            }
+        };
+
+        let mut nothing_changed = Vec::new();
+        let mut added_but_not_deleted = Vec::new();
+        let mut success = Vec::new();
+
+        for key in keys {
+            let original_key = key.clone();
+            if let Some(inner_key) = extract_inner_key(&key) {
+                let state = self
+                    .migrate_internal_from_list(source, inner_key, &records)
+                    .await;
+                match state {
+                    MigrateState::NothingChanged(err) => {
+                        nothing_changed.push((original_key, err));
+                    }
+                    MigrateState::AddedButNotDeleted(new_key, err) => {
+                        added_but_not_deleted.push(AddedButNotDeletedEntry {
+                            original_key,
+                            new_key,
+                            error: err,
+                        });
+                    }
+                    MigrateState::Success(new_key) => {
+                        success.push(SuccessEntry {
+                            original_key,
+                            new_key,
+                        });
+                    }
+                }
+            }
+        }
+
+        ProviderMigrationResult::MigrationResults {
+            nothing_changed,
+            added_but_not_deleted,
+            success,
+        }
+    }
+
+    /// Migrates multiple DNS records from various providers to the active provider.
+    ///
+    /// # Arguments
+    ///
+    /// * `keys` - A list of keys to migrate (keys from the active provider are skipped)
+    ///
+    /// # Returns
+    ///
+    /// A `BTreeMap` mapping each provider to its migration results.
+    pub async fn mass_migrate(
+        &self,
+        keys: Vec<Key>,
+    ) -> BTreeMap<Providers, ProviderMigrationResult> {
+        let active_provider = self.active_provider();
+        let mut results = BTreeMap::new();
+
+        // Process Porkbun keys
+        let result = self
+            .process_provider_keys(
+                |dns| dns.porkbun(),
+                keys.clone(),
+                |key| {
+                    // Skip keys from active provider
+                    // TODO: might want to verify the key exists in the provider before skipping
+                    if active_provider == Providers::Porkbun {
+                        return None;
+                    }
+                    if let Key::Porkbun(inner_key) = key {
+                        Some(inner_key.clone())
+                    } else {
+                        None
+                    }
+                },
+            )
+            .await;
+        results.insert(Providers::Porkbun, result);
+
+        // Process Dummy keys
+        let result = self
+            .process_provider_keys(
+                |dns| dns.dummy(),
+                keys.clone(),
+                |key| {
+                    if active_provider == Providers::Dummy {
+                        return None;
+                    }
+                    if let Key::Dummy(inner_key) = key {
+                        Some(*inner_key)
+                    } else {
+                        None
+                    }
+                },
+            )
+            .await;
+        results.insert(Providers::Dummy, result);
+
+        // Process Hickory keys
+        let result = self
+            .process_provider_keys(
+                |dns| dns.hickory(),
+                keys,
+                |key| {
+                    if active_provider == Providers::Hickory {
+                        return None;
+                    }
+                    if let Key::Hickory(inner_key) = key {
+                        Some(*inner_key)
+                    } else {
+                        None
+                    }
+                },
+            )
+            .await;
+        results.insert(Providers::Hickory, result);
+
+        results
+    }
 }
 
 /// State-based result of a migration operation.
@@ -259,6 +408,37 @@ pub enum MigrateState {
     AddedButNotDeleted(Key, MigrateError),
     /// Migration completed successfully.
     Success(Key),
+}
+
+/// Entry for a record that was added but deletion from source failed.
+#[derive(Debug)]
+pub struct AddedButNotDeletedEntry {
+    pub original_key: Key,
+    pub new_key: Key,
+    pub error: MigrateError,
+}
+
+/// Entry for a successfully migrated record.
+#[derive(Debug)]
+pub struct SuccessEntry {
+    pub original_key: Key,
+    pub new_key: Key,
+}
+
+/// Result of migrating records from a specific provider.
+#[derive(Debug)]
+pub enum ProviderMigrationResult {
+    /// Provider failed to initialize - couldn't access it or get records.
+    FailedToInitialize {
+        reason: MigrateError,
+        affected_count: usize,
+    },
+    /// Migration results for the provider.
+    MigrationResults {
+        nothing_changed: Vec<(Key, MigrateError)>,
+        added_but_not_deleted: Vec<AddedButNotDeletedEntry>,
+        success: Vec<SuccessEntry>,
+    },
 }
 
 /// Error that tracks at what stage a migration failed.
@@ -362,6 +542,7 @@ impl std::error::Error for Error {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Key {
     Porkbun(<Porkbun as Interface>::Key),
     Dummy(<Dummy as Interface>::Key),
