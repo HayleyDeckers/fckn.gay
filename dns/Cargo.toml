@@ -7,9 +7,18 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+default = ["dummy", "hickory", "porkbun"]
+dummy = ["dep:fckn-gay-dns-dummy"]
+hickory = ["dep:fckn-gay-dns-hickory"]
+porkbun = ["dep:fckn-gay-dns-porkbun"]
+
 [dependencies]
-fckn-gay-dns-dummy = { path = "./implementors/dummy" }
-fckn-gay-dns-hickory = { path = "./implementors/hickory" }
+fckn-gay-dns-dummy = { path = "./implementors/dummy", optional = true }
+fckn-gay-dns-hickory = { path = "./implementors/hickory", optional = true }
 fckn-gay-dns-interface = { path = "./interface" }
-fckn-gay-dns-porkbun = { path = "./implementors/porkbun" }
+fckn-gay-dns-porkbun = { path = "./implementors/porkbun", optional = true }
 serde.workspace = true
+
+[dev-dependencies]
+toml.workspace = true
