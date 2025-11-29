@@ -73,6 +73,29 @@ pub struct Config {
 }
 
 impl Config {
+    /// Warns about provider configs that are present but won't be validated
+    /// because the feature isn't compiled in.
+    fn warn_uncompiled_providers(&self) {
+        #[cfg(not(feature = "porkbun"))]
+        if self.porkbun.is_some() {
+            eprintln!(
+                "⚠️  Warning: [dns.porkbun] config present but 'porkbun' feature not compiled in - config won't be validated"
+            );
+        }
+        #[cfg(not(feature = "dummy"))]
+        if self.dummy.is_some() {
+            eprintln!(
+                "⚠️  Warning: [dns.dummy] config present but 'dummy' feature not compiled in - config won't be validated"
+            );
+        }
+        #[cfg(not(feature = "hickory"))]
+        if self.hickory.is_some() {
+            eprintln!(
+                "⚠️  Warning: [dns.hickory] config present but 'hickory' feature not compiled in - config won't be validated"
+            );
+        }
+    }
+
     /// Returns which provider is active, checking ALL config sections regardless of feature flags.
     /// This ensures config behavior is consistent no matter which features are compiled in.
     fn active(&self) -> Result<Providers, Error> {
@@ -309,6 +332,9 @@ impl Interface for Dns {
     type Key = Key;
 
     fn new(config: Self::Config) -> Result<Self, Self::Error> {
+        // Warn about configs that won't be validated
+        config.warn_uncompiled_providers();
+
         let selected = config.active()?;
 
         // Check if the selected provider is compiled in
@@ -586,5 +612,28 @@ mod tests {
             "Explicit provider should work: {:?}",
             result
         );
+    }
+
+    /// Test that selecting a provider that's not compiled in produces a clear error
+    #[test]
+    #[cfg(not(feature = "porkbun"))]
+    fn test_disabled_provider_error() {
+        let toml_str = r#"
+            provider = "porkbun"
+            [porkbun]
+            api_key = "test"
+            domain = "fckn.gay"
+            secret_key = "test"
+        "#;
+        let config: Config = toml::from_str(toml_str).expect("Should parse");
+        let result = Dns::new(config);
+        match result {
+            Err(Error::ProviderNotCompiled(provider)) => {
+                assert_eq!(provider, "porkbun");
+                println!("✅ Got expected error: Provider 'porkbun' not compiled in");
+            }
+            Err(e) => unreachable!("Wrong error type: {}", e),
+            Ok(_) => unreachable!("Should have errored when using disabled provider"),
+        }
     }
 }

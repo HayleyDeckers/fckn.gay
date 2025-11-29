@@ -149,6 +149,29 @@ pub struct Config {
 }
 
 impl Config {
+    /// Warns about provider configs that are present but won't be validated
+    /// because the feature isn't compiled in.
+    fn warn_uncompiled_providers(&self) {
+        #[cfg(not(feature = "dummy"))]
+        if self.dummy.is_some() {
+            eprintln!(
+                "⚠️  Warning: [user_database.dummy] config present but 'dummy' feature not compiled in - config won't be validated"
+            );
+        }
+        #[cfg(not(feature = "csv"))]
+        if self.csv.is_some() {
+            eprintln!(
+                "⚠️  Warning: [user_database.csv] config present but 'csv' feature not compiled in - config won't be validated"
+            );
+        }
+        #[cfg(not(feature = "diesel"))]
+        if self.diesel.is_some() {
+            eprintln!(
+                "⚠️  Warning: [user_database.diesel] config present but 'diesel' feature not compiled in - config won't be validated"
+            );
+        }
+    }
+
     /// Returns which provider is active, checking ALL config sections regardless of feature flags.
     /// This ensures config behavior is consistent no matter which features are compiled in.
     fn active(&self) -> Result<Providers, Error> {
@@ -186,6 +209,9 @@ impl Interface for Database {
     type Error = Error;
 
     fn new(config: Config) -> Result<Self, Self::Error> {
+        // Warn about configs that won't be validated
+        config.warn_uncompiled_providers();
+
         let selected = config.active()?;
 
         // Check if the selected provider is compiled in
