@@ -6,10 +6,15 @@ members = ["dns", "email", "secret", "server", "user-database", "validation"]
 #the core interfaces that are used by the server
 # each of these crates will expose multiple implementors of their behavior 
 # allowing for quick runtime switching between different dns providers, email providers, etc.
-fckn-gay-dns = { path = "dns" }
-fckn-gay-email = { path = "email" }
+# 
+# Each interface crate supports feature flags to compile only the providers you need:
+#   dns: dummy (default), hickory, porkbun
+#   email: dummy (default), lettre
+#   user-database: dummy (default), csv, diesel
+fckn-gay-dns = { path = "dns", default-features = true }
+fckn-gay-email = { path = "email", default-features = true }
 fckn-gay-secret = { path = "secret" }
-fckn-gay-user-database = { path = "user-database" }
+fckn-gay-user-database = { path = "user-database", default-features = true }
 fckn-gay-validation = { path = "validation" }
 
 #all other dependencies

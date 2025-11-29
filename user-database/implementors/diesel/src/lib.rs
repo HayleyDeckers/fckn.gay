@@ -5,7 +5,7 @@ use fckn_gay_user_database_interface::{
     DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry, Uuid,
 };
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct Config {
     pub database_url: String,
 }

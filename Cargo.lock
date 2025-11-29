@@ -551,6 +551,7 @@ dependencies = [
  "fckn-gay-dns-interface",
  "fckn-gay-dns-porkbun",
  "serde",
+ "toml",
 ]
 
 [[package]]
@@ -599,6 +600,7 @@ dependencies = [
  "fckn-gay-email-interface",
  "fckn-gay-email-lettre",
  "serde",
+ "toml",
 ]
 
 [[package]]
@@ -663,6 +665,7 @@ dependencies = [
  "fckn-gay-user-database-dummy",
  "fckn-gay-user-database-interface",
  "serde",
+ "toml",
 ]
 
 [[package]]
