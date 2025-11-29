@@ -636,6 +636,7 @@ name = "fckn-gay-dns-porkbun"
 version = "0.1.0"
 dependencies = [
  "fckn-gay-dns-interface",
+ "fckn-gay-secret",
  "porkbun-api",
  "serde",
 ]
@@ -671,8 +672,17 @@ name = "fckn-gay-email-lettre"
 version = "0.1.0"
 dependencies = [
  "fckn-gay-email-interface",
+ "fckn-gay-secret",
  "lettre",
  "serde",
+]
+
+[[package]]
+name = "fckn-gay-secret"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml",
 ]
 
 [[package]]

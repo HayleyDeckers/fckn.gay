@@ -45,7 +45,10 @@ zone_name = "is.fckn.gay."
 [dns.porkbun]
 # the domain you have registered at porkbun. Should be a substring of the public suffix.
 domain = "fckn.gay"
-# your credentials
+# your credentials - secrets can be specified in three ways:
+#   1. Direct value:       api_key = "YOUR_API_KEY"
+#   2. From file:          api_key = { file = "/path/to/secret" }
+#   3. From env variable:  api_key = { env = "PORKBUN_API_KEY" }
 api_key = "YOUR_API_KEY"
 secret_key = "YOUR_SECRET_KEY"
 
@@ -71,5 +74,8 @@ database_url = "sqlite.db"
 [email.lettre]
 smtp_server = "example.com"
 smtp_port = 587
-username = "[username]"
+# credentials can also use { env = "VAR_NAME" } or { file = "/path/to/secret" }
+username = "your_username@example.com"
 password = "[password]"
+# password = { env = "SMTP_PASSWORD" }
+# password = { file = "secrets/smtp_password.txt" }

@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 fckn-gay-email-interface = { path = "../../interface" }
+fckn-gay-secret = { workspace = true }
 
 lettre = { workspace = true, features = [
   "aws-lc-rs",
