@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["dns", "email", "server", "user-database", "validation"]
+members = ["dns", "email", "secret", "server", "user-database", "validation"]
 
 [workspace.dependencies]
 #the core interfaces that are used by the server
@@ -8,6 +8,7 @@ members = ["dns", "email", "server", "user-database", "validation"]
 # allowing for quick runtime switching between different dns providers, email providers, etc.
 fckn-gay-dns = { path = "dns" }
 fckn-gay-email = { path = "email" }
+fckn-gay-secret = { path = "secret" }
 fckn-gay-user-database = { path = "user-database" }
 fckn-gay-validation = { path = "validation" }
 

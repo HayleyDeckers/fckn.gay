@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display};
 
 use fckn_gay_dns_interface::{Dns, Record};
+use fckn_gay_secret::Secret;
 use porkbun_api::{
     Client, Error as ApiError,
     transport::{DefaultTransport, DefaultTransportError},
@@ -14,9 +15,9 @@ pub struct Config {
     // todo(hayley): could be extended to support multiple domains in the future
     pub domain: String,
     /// The API key for Porkbun.
-    pub api_key: String,
+    pub api_key: Secret,
     /// The secret key for Porkbun.
-    pub secret_key: String,
+    pub secret_key: Secret,
 }
 
 /// A DNS provider implementation using Porkbun.
@@ -97,7 +98,10 @@ impl Dns for PorkbunDns {
             api_key,
             secret_key,
         } = config;
-        let client = Client::new(porkbun_api::ApiKey::new(secret_key, api_key));
+        let client = Client::new(porkbun_api::ApiKey::new(
+            secret_key.into_exposed(),
+            api_key.into_exposed(),
+        ));
         Ok(PorkbunDns { client, domain })
     }
 

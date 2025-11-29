@@ -1,4 +1,5 @@
 use fckn_gay_email_interface::Email;
+use fckn_gay_secret::Secret;
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
     message::{MessageBuilder, header::ContentType},
@@ -9,8 +10,8 @@ use lettre::{
 pub struct Config {
     pub smtp_server: String,
     pub smtp_port: u16,
-    pub username: String,
-    pub password: String,
+    pub username: Secret,
+    pub password: Secret,
 }
 
 pub struct LettreEmail {
@@ -22,7 +23,10 @@ impl Email for LettreEmail {
     type Error = lettre::transport::smtp::Error;
 
     fn new(config: Self::Config) -> Result<Self, Self::Error> {
-        let credentials = Credentials::new(config.username, config.password);
+        let credentials = Credentials::new(
+            config.username.into_exposed(),
+            config.password.into_exposed(),
+        );
         let smtp_transport = AsyncSmtpTransport::<Tokio1Executor>::relay(&config.smtp_server)?
             .port(config.smtp_port)
             .credentials(credentials)
