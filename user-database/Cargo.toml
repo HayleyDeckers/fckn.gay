@@ -18,7 +18,7 @@ fckn-gay-user-database-csv = { path = "./implementors/csv", optional = true }
 fckn-gay-user-database-diesel = { path = "./implementors/diesel", optional = true }
 fckn-gay-user-database-dummy = { path = "./implementors/dummy", optional = true }
 fckn-gay-user-database-interface = { path = "./interface" }
-
+log.workspace = true
 serde.workspace = true
 
 [dev-dependencies]

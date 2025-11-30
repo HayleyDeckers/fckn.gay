@@ -154,20 +154,20 @@ impl Config {
     fn warn_uncompiled_providers(&self) {
         #[cfg(not(feature = "dummy"))]
         if self.dummy.is_some() {
-            eprintln!(
-                "⚠️  Warning: [user_database.dummy] config present but 'dummy' feature not compiled in - config won't be validated"
+            log::warn!(
+                "[user_database.dummy] config present but 'dummy' feature not compiled in - config won't be validated"
             );
         }
         #[cfg(not(feature = "csv"))]
         if self.csv.is_some() {
-            eprintln!(
-                "⚠️  Warning: [user_database.csv] config present but 'csv' feature not compiled in - config won't be validated"
+            log::warn!(
+                "[user_database.csv] config present but 'csv' feature not compiled in - config won't be validated"
             );
         }
         #[cfg(not(feature = "diesel"))]
         if self.diesel.is_some() {
-            eprintln!(
-                "⚠️  Warning: [user_database.diesel] config present but 'diesel' feature not compiled in - config won't be validated"
+            log::warn!(
+                "[user_database.diesel] config present but 'diesel' feature not compiled in - config won't be validated"
             );
         }
     }

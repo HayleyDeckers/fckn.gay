@@ -240,7 +240,7 @@ impl Dns for HickoryDns {
         }
         tokio::spawn(async move {
             while let Err(e) = server.block_until_done().await {
-                eprintln!("oopsie: {e}");
+                log::error!("Hickory DNS server error: {e}");
             }
         });
         Ok(Self { server_file: file })

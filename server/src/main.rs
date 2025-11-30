@@ -40,11 +40,14 @@ fn silly_panic_handler(panic: Box<dyn Any + Send + 'static>) -> Response<Body> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize logging - defaults to info level, override with RUST_LOG env var
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
     let config = Config::load_from_file("config.toml")?;
     let listener = tokio::net::TcpListener::bind(&config.address)
         .await
         .context("Failed to bind to address")?;
-    println!("starting server on http://{}", config.address);
+    log::info!("starting server on http://{}", config.address);
     let interfaces = Interfaces::new(config)?;
 
     // make a web server with axum

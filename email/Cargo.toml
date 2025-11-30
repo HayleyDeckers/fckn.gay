@@ -16,7 +16,7 @@ lettre = ["dep:fckn-gay-email-lettre"]
 fckn-gay-email-dummy = { path = "./implementors/dummy", optional = true }
 fckn-gay-email-interface = { path = "./interface" }
 fckn-gay-email-lettre = { path = "./implementors/lettre", optional = true }
-
+log.workspace = true
 serde.workspace = true
 
 [dev-dependencies]

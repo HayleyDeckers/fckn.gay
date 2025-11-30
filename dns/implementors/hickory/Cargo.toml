@@ -9,6 +9,7 @@ fckn-gay-dns-interface = { path = "../../interface" }
 
 async-trait = { workspace = true }
 hickory-server = { workspace = true }
+log.workspace = true
 serde.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 toml.workspace = true

@@ -11,6 +11,7 @@ workspace = true
 chrono.workspace = true
 diesel.workspace = true
 fckn-gay-user-database-interface = { path = "../../interface" }
+log.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync"] }

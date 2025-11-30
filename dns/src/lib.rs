@@ -78,20 +78,20 @@ impl Config {
     fn warn_uncompiled_providers(&self) {
         #[cfg(not(feature = "porkbun"))]
         if self.porkbun.is_some() {
-            eprintln!(
-                "⚠️  Warning: [dns.porkbun] config present but 'porkbun' feature not compiled in - config won't be validated"
+            log::warn!(
+                "[dns.porkbun] config present but 'porkbun' feature not compiled in - config won't be validated"
             );
         }
         #[cfg(not(feature = "dummy"))]
         if self.dummy.is_some() {
-            eprintln!(
-                "⚠️  Warning: [dns.dummy] config present but 'dummy' feature not compiled in - config won't be validated"
+            log::warn!(
+                "[dns.dummy] config present but 'dummy' feature not compiled in - config won't be validated"
             );
         }
         #[cfg(not(feature = "hickory"))]
         if self.hickory.is_some() {
-            eprintln!(
-                "⚠️  Warning: [dns.hickory] config present but 'hickory' feature not compiled in - config won't be validated"
+            log::warn!(
+                "[dns.hickory] config present but 'hickory' feature not compiled in - config won't be validated"
             );
         }
     }
@@ -394,7 +394,7 @@ impl Interface for Dns {
         let porkbun = match porkbun {
             Some(Ok(porkbun)) => Some(porkbun),
             Some(Err(e)) => {
-                eprintln!("Error creating DNS provider (Porkbun): {e}");
+                log::error!("Failed to create DNS provider (Porkbun): {e}");
                 None
             }
             None => None,
@@ -403,7 +403,7 @@ impl Interface for Dns {
         let dummy = match dummy {
             Some(Ok(dummy)) => Some(dummy),
             Some(Err(e)) => {
-                eprintln!("Error creating DNS provider (Dummy): {e}");
+                log::error!("Failed to create DNS provider (Dummy): {e}");
                 None
             }
             None => None,
@@ -412,7 +412,7 @@ impl Interface for Dns {
         let hickory = match hickory {
             Some(Ok(hickory)) => Some(hickory),
             Some(Err(e)) => {
-                eprintln!("Error creating DNS provider (Hickory): {e}");
+                log::error!("Failed to create DNS provider (Hickory): {e}");
                 None
             }
             None => None,
