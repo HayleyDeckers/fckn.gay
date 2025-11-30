@@ -12,7 +12,22 @@ use serde::Deserialize;
 use crate::{
     auth_cache::{AuthenticatedFor, add_authorization_or_unauthorized},
     error::AppError,
+    interfaces::PublicSuffix,
 };
+
+/// Checks if a record name belongs to the user's subdomain.
+/// For user `alice` with suffix `.is.fckn.gay`:
+/// - Valid: `alice.is.fckn.gay` (their root)
+/// - Valid: `something.alice.is.fckn.gay` (subdomain under root)
+/// - Invalid: `bob.is.fckn.gay` (someone else's root)
+fn is_valid_subdomain_for_user(
+    record_name: &str,
+    username: &str,
+    public_suffix: &PublicSuffix,
+) -> bool {
+    let user_root = format!("{}{}", username, public_suffix);
+    record_name == user_root || record_name.ends_with(&format!(".{}", user_root))
+}
 
 /// Get DNS records for the authenticated user
 async fn get_records(
@@ -33,6 +48,20 @@ async fn add_record(
     authenticed_for: AuthenticatedFor,
     AxumJson(req): AxumJson<DnsRecord>,
 ) -> Result<axum::Json<DnsRecordId>, AppError> {
+    // Step 0: Validate that the record belongs to this user's subdomain
+    let username = authenticed_for.username();
+    if !is_valid_subdomain_for_user(&req.name, username, &interfaces.hostname) {
+        let user_root = format!("{}{}", username, interfaces.hostname);
+        return Err(AppError::new(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!(
+                "record name must end with '.{}' (or be exactly '{}')",
+                user_root,
+                user_root
+            ),
+        ));
+    }
+
     // Step 1: Add to DNS provider first
     let provider_key = interfaces.dns.add_record(req.clone()).await.map_err(|e| {
         AppError::new(
