@@ -21,6 +21,7 @@ impl Interface for Email {
         subject: &str,
         body: &str,
     ) -> Result<(), Self::Error> {
+        // Using println! intentionally - this is a dummy/test implementor and we always want to see the output
         println!(
             "Sending email:\nFrom: <{from}>\nTo: <{to}>\nSubject: \"{subject}\"\n----\n{body}\n----"
         );

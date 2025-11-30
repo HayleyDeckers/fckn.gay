@@ -52,7 +52,7 @@ async fn add_record(
         Err(db_error) => {
             // Step 3: Rollback - delete from DNS provider
             if let Err(rollback_error) = interfaces.dns.delete_record(provider_key).await {
-                eprintln!("Failed to rollback DNS record: {}", rollback_error);
+                log::error!("Failed to rollback DNS record: {}", rollback_error);
             }
             Err(AppError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -108,7 +108,7 @@ async fn delete_record(
             // Step 3: Rollback - add back to database
             // We need to get the record data to rollback, but we already deleted it
             // This is a limitation of the current approach
-            eprintln!("Failed to delete from DNS provider: {}", dns_error);
+            log::error!("Failed to delete from DNS provider: {}", dns_error);
             Err(AppError::new(
                 StatusCode::BAD_GATEWAY,
                 anyhow::anyhow!("Failed to delete record from DNS provider: {}", dns_error),
@@ -172,7 +172,7 @@ async fn update_record(
         Err(db_error) => {
             // Step 3: Rollback - we need to restore the original record in DNS provider
             // This is a limitation - we don't have the original record data
-            eprintln!("Failed to update record in database: {}", db_error);
+            log::error!("Failed to update record in database: {}", db_error);
             Err(AppError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 anyhow::anyhow!("Failed to update record in database: {}", db_error),

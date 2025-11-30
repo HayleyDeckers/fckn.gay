@@ -122,7 +122,7 @@ pub async fn add_authorization(state: &AuthenticationCache, request: &mut Reques
         // those are for the browser to care about
         let token = cookie.value();
         if let Some((username, user_id)) = state.get_user_from_token(token).await {
-            println!("User {username} (ID: {user_id}) authorized with token {token}");
+            log::debug!("User {username} (ID: {user_id}) authorized with token {token}");
             request
                 .extensions_mut()
                 .insert(AuthenticatedFor::new(user_id));

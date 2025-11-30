@@ -18,7 +18,9 @@ fckn-gay-validation.workspace = true
 anyhow.workspace = true
 axum = { workspace = true, features = ["form", "http1", "http2", "json", "tokio"] }
 axum-extra = { workspace = true, features = ["cookie"] }
+env_logger.workspace = true
 getrandom.workspace = true
+log.workspace = true
 serde.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 toml.workspace = true

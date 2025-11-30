@@ -65,14 +65,14 @@ impl Config {
     fn warn_uncompiled_providers(&self) {
         #[cfg(not(feature = "lettre"))]
         if self.lettre.is_some() {
-            eprintln!(
-                "⚠️  Warning: [email.lettre] config present but 'lettre' feature not compiled in - config won't be validated"
+            log::warn!(
+                "[email.lettre] config present but 'lettre' feature not compiled in - config won't be validated"
             );
         }
         #[cfg(not(feature = "dummy"))]
         if self.dummy.is_some() {
-            eprintln!(
-                "⚠️  Warning: [email.dummy] config present but 'dummy' feature not compiled in - config won't be validated"
+            log::warn!(
+                "[email.dummy] config present but 'dummy' feature not compiled in - config won't be validated"
             );
         }
     }

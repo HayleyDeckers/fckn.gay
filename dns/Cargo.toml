@@ -18,6 +18,7 @@ fckn-gay-dns-dummy = { path = "./implementors/dummy", optional = true }
 fckn-gay-dns-hickory = { path = "./implementors/hickory", optional = true }
 fckn-gay-dns-interface = { path = "./interface" }
 fckn-gay-dns-porkbun = { path = "./implementors/porkbun", optional = true }
+log.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
