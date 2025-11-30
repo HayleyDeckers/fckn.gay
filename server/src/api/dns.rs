@@ -48,7 +48,16 @@ async fn add_record(
     authenticed_for: AuthenticatedFor,
     AxumJson(req): AxumJson<DnsRecord>,
 ) -> Result<axum::Json<DnsRecordId>, AppError> {
-    // Step 0: Validate that the record belongs to this user's subdomain
+    // Step 0a: Validate the record name is a proper DNS name
+    let validation = fckn_gay_validation::validate_dns_record_name(&req.name);
+    if !validation.is_valid() {
+        return Err(AppError::new(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("invalid record name: {}", validation.errors().join(", ")),
+        ));
+    }
+
+    // Step 0b: Validate that the record belongs to this user's subdomain
     let username = authenticed_for.username();
     if !is_valid_subdomain_for_user(&req.name, username, &interfaces.hostname) {
         let user_root = format!("{}{}", username, interfaces.hostname);
@@ -222,4 +231,115 @@ pub fn router(appstate: crate::Interfaces) -> Router<crate::Interfaces> {
             appstate.auth_cache.clone(),
             add_authorization_or_unauthorized,
         ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_suffix() -> PublicSuffix {
+        PublicSuffix::new("is.fckn.gay".to_string())
+    }
+
+    #[test]
+    fn subdomain_validation_exact_match() {
+        let suffix = test_suffix();
+        // User's exact root domain should be valid
+        assert!(is_valid_subdomain_for_user(
+            "alice.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+        assert!(is_valid_subdomain_for_user(
+            "bob.is.fckn.gay",
+            "bob",
+            &suffix
+        ));
+    }
+
+    #[test]
+    fn subdomain_validation_subdomains() {
+        let suffix = test_suffix();
+        // Subdomains under user's root should be valid
+        assert!(is_valid_subdomain_for_user(
+            "www.alice.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+        assert!(is_valid_subdomain_for_user(
+            "api.alice.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+        assert!(is_valid_subdomain_for_user(
+            "deep.nested.sub.alice.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+    }
+
+    #[test]
+    fn subdomain_validation_wrong_user() {
+        let suffix = test_suffix();
+        // Other users' domains should be invalid
+        assert!(!is_valid_subdomain_for_user(
+            "bob.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+        assert!(!is_valid_subdomain_for_user(
+            "www.bob.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+    }
+
+    #[test]
+    fn subdomain_validation_partial_match_rejected() {
+        let suffix = test_suffix();
+        // "alice" appearing elsewhere shouldn't match
+        assert!(!is_valid_subdomain_for_user(
+            "alice-fake.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+        assert!(!is_valid_subdomain_for_user(
+            "notaalice.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+        // Username as subdomain of another user shouldn't match
+        assert!(!is_valid_subdomain_for_user(
+            "alice.bob.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+    }
+
+    #[test]
+    fn subdomain_validation_wrong_suffix() {
+        let suffix = test_suffix();
+        // Wrong base domain should be invalid
+        assert!(!is_valid_subdomain_for_user(
+            "alice.is.fckn.gay.evil.com",
+            "alice",
+            &suffix
+        ));
+        assert!(!is_valid_subdomain_for_user(
+            "alice.different.domain",
+            "alice",
+            &suffix
+        ));
+    }
+
+    #[test]
+    fn subdomain_validation_empty_inputs() {
+        let suffix = test_suffix();
+        assert!(!is_valid_subdomain_for_user("", "alice", &suffix));
+        assert!(!is_valid_subdomain_for_user(
+            "alice.is.fckn.gay",
+            "",
+            &suffix
+        ));
+    }
 }
