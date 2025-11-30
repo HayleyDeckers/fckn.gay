@@ -99,15 +99,20 @@ impl AuthenticationCache {
 #[derive(Clone, Debug)]
 pub struct AuthenticatedFor {
     user_id: Uuid,
+    username: String,
 }
 
 impl AuthenticatedFor {
-    pub fn new(user_id: Uuid) -> Self {
-        Self { user_id }
+    pub fn new(user_id: Uuid, username: String) -> Self {
+        Self { user_id, username }
     }
 
     pub fn user_id(&self) -> Uuid {
         self.user_id
+    }
+
+    pub fn username(&self) -> &str {
+        &self.username
     }
 }
 
@@ -125,7 +130,7 @@ pub async fn add_authorization(state: &AuthenticationCache, request: &mut Reques
             log::debug!("User {username} (ID: {user_id}) authorized with token {token}");
             request
                 .extensions_mut()
-                .insert(AuthenticatedFor::new(user_id));
+                .insert(AuthenticatedFor::new(user_id, username));
             return true;
         }
     }
