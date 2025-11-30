@@ -700,7 +700,6 @@ version = "0.1.0"
 dependencies = [
  "fckn-gay-email-interface",
  "lettre",
- "log",
  "serde",
 ]
 
