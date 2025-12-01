@@ -79,3 +79,16 @@ username = "your_username@example.com"
 password = "[password]"
 # password = { env = "SMTP_PASSWORD" }
 # password = { file = "secrets/smtp_password.txt" }
+
+# Rate limiting to prevent abuse and brute-force attacks
+# Rate limit info is exposed via X-RateLimit-* headers so clients can auto-backoff
+[rate_limit]
+# Auth routes (login, signup, etc) - rate limited by IP address
+# Stricter limits help prevent brute-force password attacks
+auth_burst_size = 10  # max requests before rate limiting kicks in
+auth_per_seconds = 60 # seconds to replenish one request slot
+
+# API routes - rate limited per authenticated user
+# More generous limits since these are legitimate users
+api_burst_size = 30  # max requests before rate limiting kicks in
+api_per_seconds = 60 # seconds to replenish one request slot

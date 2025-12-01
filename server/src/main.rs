@@ -3,9 +3,10 @@ mod auth;
 mod auth_cache;
 mod error;
 mod interfaces;
+mod rate_limit;
 mod user_routes;
 
-use std::any::Any;
+use std::{any::Any, net::SocketAddr};
 
 use anyhow::{Context, Result};
 use axum::{body::Body, response::Response};
@@ -50,6 +51,10 @@ async fn main() -> Result<()> {
     log::info!("starting server on http://{}", config.address);
     let interfaces = Interfaces::new(config)?;
 
+    // Build rate limiting layers from config
+    let auth_rate_limiter = rate_limit::auth_rate_limit_layer(&interfaces.rate_limit);
+    let api_rate_limiter = rate_limit::api_rate_limit_layer(&interfaces.rate_limit);
+
     // make a web server with axum
     // that uses the interfaces to glue all the functionality together
     // need one extra inteface for the auth cache
@@ -62,10 +67,16 @@ async fn main() -> Result<()> {
     let auth_router = auth::router(interfaces.clone());
 
     let app = auth_router
+        // Rate limit auth routes by IP (prevents brute force attacks)
+        .layer(auth_rate_limiter)
         // html pages that require authentication
         .merge(axum::Router::new().nest("/user", user_routes))
-        // api routes, most will need a valid session or api key
-        .merge(axum::Router::new().nest("/api", api_router))
+        // api routes with per-user rate limiting
+        .merge(
+            axum::Router::new()
+                .nest("/api", api_router)
+                .layer(api_rate_limiter),
+        )
         // WASM files with correct MIME type
         .merge(axum::Router::new().route(
             "/fckn_gay_validation_bg.wasm",
@@ -92,9 +103,13 @@ async fn main() -> Result<()> {
         .layer(CatchPanicLayer::custom(silly_panic_handler))
         .with_state(interfaces);
 
-    axum::serve(listener, app)
-        .await
-        .context("Failed to start server")?;
+    // Use into_make_service_with_connect_info so SmartIpKeyExtractor can access peer IP
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .context("Failed to start server")?;
 
     Ok(())
 }

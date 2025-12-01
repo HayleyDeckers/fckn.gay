@@ -20,9 +20,11 @@ axum = { workspace = true, features = ["form", "http1", "http2", "json", "tokio"
 axum-extra = { workspace = true, features = ["cookie"] }
 env_logger.workspace = true
 getrandom.workspace = true
+governor.workspace = true
 log.workspace = true
 serde.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 toml.workspace = true
 tower-http = { workspace = true, features = ["catch-panic", "fs"] }
+tower_governor.workspace = true
 uuid.workspace = true
