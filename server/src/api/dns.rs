@@ -20,13 +20,48 @@ use crate::{
 /// - Valid: `alice.is.fckn.gay` (their root)
 /// - Valid: `something.alice.is.fckn.gay` (subdomain under root)
 /// - Invalid: `bob.is.fckn.gay` (someone else's root)
+///
+/// Note: DNS is case-insensitive (RFC 1035), so we compare lowercase.
 fn is_valid_subdomain_for_user(
     record_name: &str,
     username: &str,
     public_suffix: &PublicSuffix,
 ) -> bool {
-    let user_root = format!("{}{}", username, public_suffix);
-    record_name == user_root || record_name.ends_with(&format!(".{}", user_root))
+    let record_name_lower = record_name.to_ascii_lowercase();
+    let user_root = format!("{}{}", username, public_suffix).to_ascii_lowercase();
+    record_name_lower == user_root || record_name_lower.ends_with(&format!(".{}", user_root))
+}
+
+/// Validates a DNS record name for format and ownership.
+/// Returns Ok(()) if valid, or an appropriate AppError if not.
+fn validate_record_for_user(
+    record_name: &str,
+    username: &str,
+    public_suffix: &PublicSuffix,
+) -> Result<(), AppError> {
+    // Check the record name is a proper DNS name
+    let validation = fckn_gay_validation::validate_dns_record_name(record_name);
+    if !validation.is_valid() {
+        return Err(AppError::new(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("invalid record name: {}", validation.errors().join(", ")),
+        ));
+    }
+
+    // Check the record belongs to this user's subdomain
+    if !is_valid_subdomain_for_user(record_name, username, public_suffix) {
+        let user_root = format!("{}{}", username, public_suffix);
+        return Err(AppError::new(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!(
+                "record name must end with '.{}' (or be exactly '{}')",
+                user_root,
+                user_root
+            ),
+        ));
+    }
+
+    Ok(())
 }
 
 /// Get DNS records for the authenticated user
@@ -48,28 +83,8 @@ async fn add_record(
     authenticed_for: AuthenticatedFor,
     AxumJson(req): AxumJson<DnsRecord>,
 ) -> Result<axum::Json<DnsRecordId>, AppError> {
-    // Step 0a: Validate the record name is a proper DNS name
-    let validation = fckn_gay_validation::validate_dns_record_name(&req.name);
-    if !validation.is_valid() {
-        return Err(AppError::new(
-            StatusCode::BAD_REQUEST,
-            anyhow::anyhow!("invalid record name: {}", validation.errors().join(", ")),
-        ));
-    }
-
-    // Step 0b: Validate that the record belongs to this user's subdomain
-    let username = authenticed_for.username();
-    if !is_valid_subdomain_for_user(&req.name, username, &interfaces.hostname) {
-        let user_root = format!("{}{}", username, interfaces.hostname);
-        return Err(AppError::new(
-            StatusCode::BAD_REQUEST,
-            anyhow::anyhow!(
-                "record name must end with '.{}' (or be exactly '{}')",
-                user_root,
-                user_root
-            ),
-        ));
-    }
+    // Validate record name format and ownership
+    validate_record_for_user(&req.name, authenticed_for.username(), &interfaces.hostname)?;
 
     // Step 1: Add to DNS provider first
     let provider_key = interfaces.dns.add_record(req.clone()).await.map_err(|e| {
@@ -168,6 +183,13 @@ async fn update_record(
     authenticed_for: AuthenticatedFor,
     AxumJson(req): AxumJson<UpdateRecordRequest>,
 ) -> Result<StatusCode, AppError> {
+    // Validate record name format and ownership
+    validate_record_for_user(
+        &req.content.name,
+        authenticed_for.username(),
+        &interfaces.hostname,
+    )?;
+
     // Get the provider key from the database
     let provider_key = interfaces
         .user_database
@@ -339,6 +361,33 @@ mod tests {
         assert!(!is_valid_subdomain_for_user(
             "alice.is.fckn.gay",
             "",
+            &suffix
+        ));
+    }
+
+    #[test]
+    fn subdomain_validation_case_insensitive() {
+        let suffix = test_suffix();
+        // DNS is case-insensitive per RFC 1035
+        assert!(is_valid_subdomain_for_user(
+            "ALICE.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+        assert!(is_valid_subdomain_for_user(
+            "Alice.Is.Fckn.Gay",
+            "alice",
+            &suffix
+        ));
+        assert!(is_valid_subdomain_for_user(
+            "Sub.ALICE.is.fckn.gay",
+            "alice",
+            &suffix
+        ));
+        // Mixed case subdomains should work
+        assert!(is_valid_subdomain_for_user(
+            "MyApp.alice.is.fckn.gay",
+            "alice",
             &suffix
         ));
     }
