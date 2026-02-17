@@ -24,7 +24,6 @@ fn silly_panic_handler(panic: Box<dyn Any + Send + 'static>) -> Response<Body> {
         "something went wrong".to_string()
     };
 
-    // Create a silly error response that matches our style guide
     let body = format!(
         "server ded RIP 💀\n\n\
         The server had a little oopsie: {}\n\n\
@@ -41,7 +40,6 @@ fn silly_panic_handler(panic: Box<dyn Any + Send + 'static>) -> Response<Body> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging - defaults to info level, override with RUST_LOG env var
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let config = Config::load_from_file("config.toml")?;
@@ -51,32 +49,14 @@ async fn main() -> Result<()> {
     log::info!("starting server on http://{}", config.address);
     let interfaces = Interfaces::new(config)?;
 
-    // Build rate limiting layers from config
-    let auth_rate_limiter = rate_limit::auth_rate_limit_layer(&interfaces.rate_limit);
-    let api_rate_limiter = rate_limit::api_rate_limit_layer(&interfaces.rate_limit);
-
-    // make a web server with axum
-    // that uses the interfaces to glue all the functionality together
-    // need one extra inteface for the auth cache
-    // but perhaps we want to just integrate that with thhe user database
-    //
-    // we should also run a ctrl-c handler to gracefully shutdown the server
-    // and flsuh the interfaces
-    let user_routes = user_routes::router(interfaces.clone(), "server/static/u");
-    let api_router = api::router(interfaces.clone());
-    let auth_router = auth::router(interfaces.clone());
-
-    let app = auth_router
-        // Rate limit auth routes by IP (prevents brute force attacks)
-        .layer(auth_rate_limiter)
-        // html pages that require authentication
-        .merge(axum::Router::new().nest("/user", user_routes))
-        // api routes with per-user rate limiting
-        .merge(
-            axum::Router::new()
-                .nest("/api", api_router)
-                .layer(api_rate_limiter),
-        )
+    // Each module owns its middleware (auth, rate limiting, etc).
+    // main.rs just wires the routers together.
+    let app = auth::router(interfaces.clone())
+        .merge(axum::Router::new().nest(
+            "/user",
+            user_routes::router(interfaces.clone(), "server/static/u"),
+        ))
+        .merge(axum::Router::new().nest("/api", api::router(interfaces.clone())))
         // WASM files with correct MIME type
         .merge(axum::Router::new().route(
             "/fckn_gay_validation_bg.wasm",
@@ -99,11 +79,9 @@ async fn main() -> Result<()> {
                 .precompressed_deflate()
                 .precompressed_zstd(),
         )
-        // Add panic-catching middleware to all routes with our silly error messages
         .layer(CatchPanicLayer::custom(silly_panic_handler))
         .with_state(interfaces);
 
-    // Use into_make_service_with_connect_info so SmartIpKeyExtractor can access peer IP
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),

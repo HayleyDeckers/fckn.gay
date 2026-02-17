@@ -2,18 +2,13 @@ use axum::{
     Router,
     extract::{Json as AxumJson, State},
     http::StatusCode,
-    middleware::from_fn_with_state,
     routing::{delete, get, post, put},
 };
 use fckn_gay_dns::{Interface as DnsInterface, Record as DnsRecord};
 use fckn_gay_user_database::{DatabaseDnsRecord, DnsRecordId, Interface as UserDatabaseInterface};
 use serde::Deserialize;
 
-use crate::{
-    auth_cache::{AuthenticatedFor, add_authorization_or_unauthorized},
-    error::AppError,
-    interfaces::PublicSuffix,
-};
+use crate::{auth_cache::AuthenticatedFor, error::AppError, interfaces::PublicSuffix};
 
 /// Checks if a record name belongs to the user's subdomain.
 /// For user `alice` with suffix `.is.fckn.gay`:
@@ -241,18 +236,14 @@ async fn update_record(
     }
 }
 
-/// DNS API router with authentication middleware
+/// DNS API routes. Auth + rate limiting applied by the parent api router.
 pub fn router(appstate: crate::Interfaces) -> Router<crate::Interfaces> {
     Router::new()
         .route("/dns/records", get(get_records))
         .route("/dns/add_record", post(add_record))
         .route("/dns/delete_record", delete(delete_record))
         .route("/dns/update_record", put(update_record))
-        .with_state(appstate.clone())
-        .layer(from_fn_with_state(
-            appstate.auth_cache.clone(),
-            add_authorization_or_unauthorized,
-        ))
+        .with_state(appstate)
 }
 
 #[cfg(test)]
