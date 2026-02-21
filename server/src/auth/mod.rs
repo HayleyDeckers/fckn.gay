@@ -1,4 +1,5 @@
 pub mod login;
+pub mod password_reset;
 pub mod signup;
 
 use axum::Router;
@@ -16,6 +17,14 @@ pub fn router(appstate: Interfaces) -> Router<Interfaces> {
         .route(
             "/confirm-signup/{uuid}",
             axum::routing::get(signup::confirm_sign_up),
+        )
+        .route(
+            "/request-password-reset",
+            axum::routing::post(password_reset::request_password_reset),
+        )
+        .route(
+            "/reset-password",
+            axum::routing::post(password_reset::reset_password),
         )
         .with_state(appstate)
         .layer(rate_limiter)

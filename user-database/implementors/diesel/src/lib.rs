@@ -22,6 +22,8 @@ pub enum Error {
     DatabaseError(#[from] diesel::result::Error),
     #[error("{0}")]
     Other(String),
+    #[error("Multiple users found")]
+    MultipleUsersFound,
 }
 
 impl UserDatabase for Database {
@@ -258,5 +260,45 @@ impl UserDatabase for Database {
             .first::<String>(&mut *self.connection.lock().await)?;
 
         Ok(record)
+    }
+
+    async fn update_user_password(
+        &self,
+        user_id: Uuid,
+        password: PasswordHash,
+    ) -> Result<(), Self::Error> {
+        use self::schema::users::dsl::{password_hash, users};
+        let user_bytes = user_id.to_bytes_le();
+        let updated = diesel::update(users.filter(schema::users::id.eq(&user_bytes)))
+            .set(password_hash.eq(password.into_string()))
+            .execute(&mut *self.connection.lock().await)?;
+        if updated == 0 {
+            Err(Error::Other(
+                "User not found, can't update password".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn get_user_by_username_or_email(
+        &self,
+        username_or_email: &str,
+    ) -> Result<Option<UserEntry>, Self::Error> {
+        use self::schema::users::dsl::users;
+        let mut conn = self.connection.lock().await;
+        let user = users
+            .filter(
+                schema::users::username
+                    .eq(username_or_email)
+                    .or(schema::users::email.eq(username_or_email)),
+            )
+            .load::<models::RawUser>(&mut *conn)?;
+        if user.len() > 1 {
+            //this should never happen, usernames and emails should be unique
+            // and a valid email should never be a valid username
+            return Err(Error::MultipleUsersFound);
+        }
+        Ok(user.into_iter().next().map(UserEntry::from))
     }
 }

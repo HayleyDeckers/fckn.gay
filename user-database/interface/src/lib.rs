@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 pub use uuid::Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PasswordHash(String);
 impl PasswordHash {
     pub fn new(password: &str) -> Self {
@@ -23,7 +23,7 @@ impl PasswordHash {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum UserState {
     Pending,
     Active,
@@ -32,7 +32,7 @@ pub enum UserState {
 }
 
 // uuid field is also the key for activating an account
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UserEntry {
     pub id: Uuid,
     pub username: String,
@@ -141,6 +141,32 @@ pub trait UserDatabase {
     #[allow(unused_variables)]
     fn activate_user(&self, uuid: Uuid) -> impl Future<Output = Result<(), Self::Error>> {
         async { todo!("activate_user is not implemented") }
+    }
+
+    #[allow(unused_variables)]
+    fn update_user_password(
+        &self,
+        user_id: Uuid,
+        password: PasswordHash,
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        async { todo!("update_user_password is not implemented") }
+    }
+
+    #[allow(unused_variables)]
+    fn update_user<F: FnOnce(UserEntry) -> Result<UserEntry, Self::Error>>(
+        &self,
+        user_id: Uuid,
+        f: F,
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        async { todo!("update_user is not implemented") }
+    }
+
+    #[allow(unused_variables)]
+    fn get_user_by_username_or_email(
+        &self,
+        username_or_email: &str,
+    ) -> impl Future<Output = Result<Option<UserEntry>, Self::Error>> {
+        async { todo!("get_user_by_username_or_email is not implemented") }
     }
 
     // DNS record management methods

@@ -12,7 +12,7 @@ pub use fckn_gay_user_database_diesel::Database as DieselDatabase;
 #[cfg(feature = "dummy")]
 pub use fckn_gay_user_database_dummy::Database as DummyDatabase;
 pub use fckn_gay_user_database_interface::{
-    DatabaseDnsRecord, DnsRecordId, UserDatabase as Interface, Uuid,
+    DatabaseDnsRecord, DnsRecordId, PasswordHash, UserDatabase as Interface, Uuid,
 };
 use serde::{Deserialize, Deserializer};
 
@@ -435,6 +435,53 @@ impl Interface for Database {
             #[cfg(feature = "diesel")]
             Database::Diesel(db) => db
                 .get_dns_record_provider_key(user_id, record_id)
+                .await
+                .map_err(Self::Error::Diesel),
+        }
+    }
+
+    async fn update_user_password(
+        &self,
+        user_id: Uuid,
+        password: fckn_gay_user_database_interface::PasswordHash,
+    ) -> Result<(), Self::Error> {
+        match self {
+            #[cfg(feature = "dummy")]
+            Database::Dummy(db) => db
+                .update_user_password(user_id, password)
+                .await
+                .map_err(Self::Error::Dummy),
+            #[cfg(feature = "csv")]
+            Database::Csv(db) => db
+                .update_user_password(user_id, password)
+                .await
+                .map_err(Self::Error::Csv),
+            #[cfg(feature = "diesel")]
+            Database::Diesel(db) => db
+                .update_user_password(user_id, password)
+                .await
+                .map_err(Self::Error::Diesel),
+        }
+    }
+
+    async fn get_user_by_username_or_email(
+        &self,
+        username_or_email: &str,
+    ) -> Result<Option<fckn_gay_user_database_interface::UserEntry>, Self::Error> {
+        match self {
+            #[cfg(feature = "dummy")]
+            Database::Dummy(db) => db
+                .get_user_by_username_or_email(username_or_email)
+                .await
+                .map_err(Self::Error::Dummy),
+            #[cfg(feature = "csv")]
+            Database::Csv(db) => db
+                .get_user_by_username_or_email(username_or_email)
+                .await
+                .map_err(Self::Error::Csv),
+            #[cfg(feature = "diesel")]
+            Database::Diesel(db) => db
+                .get_user_by_username_or_email(username_or_email)
                 .await
                 .map_err(Self::Error::Diesel),
         }

@@ -7,6 +7,8 @@ use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseIntferface};
 use serde::{Deserialize, Deserializer};
 
+use crate::auth_cache::{AuthenticationCache, PasswordResetCache};
+
 /// Rate limiting configuration for both auth (IP-based) and API (user-based) routes.
 /// All values are configurable through the server config file.
 #[derive(Clone, Debug, Deserialize)]
@@ -111,10 +113,14 @@ pub struct Interfaces {
     /// The email interface for sending emails.
     pub email: Arc<Email>,
     /// a cache for login sessions, gets cleared on server restart
-    pub auth_cache: Arc<crate::auth_cache::AuthenticationCache>,
+    pub auth_cache: Arc<AuthenticationCache>,
+    /// the public suffix of the server
     pub hostname: PublicSuffix,
     /// Rate limiting configuration
     pub rate_limit: RateLimitConfig,
+    /// Small in-memory cache for password reset tokens
+    /// not persisted to disk since they're short-lived and easily regenerated
+    pub password_reset_cache: PasswordResetCache,
 }
 
 impl FromRef<Interfaces> for Arc<Dns> {
@@ -133,9 +139,14 @@ impl FromRef<Interfaces> for Arc<Email> {
         state.email.clone()
     }
 }
-impl FromRef<Interfaces> for Arc<crate::auth_cache::AuthenticationCache> {
+impl FromRef<Interfaces> for Arc<AuthenticationCache> {
     fn from_ref(state: &Interfaces) -> Self {
         state.auth_cache.clone()
+    }
+}
+impl FromRef<Interfaces> for PasswordResetCache {
+    fn from_ref(state: &Interfaces) -> Self {
+        state.password_reset_cache.clone()
     }
 }
 
@@ -168,9 +179,10 @@ impl Interfaces {
             dns,
             user_database,
             email,
-            auth_cache: Arc::new(crate::auth_cache::AuthenticationCache::new()),
+            auth_cache: Arc::new(AuthenticationCache::new()),
             hostname: config.public_suffix,
             rate_limit: config.rate_limit,
+            password_reset_cache: PasswordResetCache(Arc::new(AuthenticationCache::new())),
         })
     }
 }
