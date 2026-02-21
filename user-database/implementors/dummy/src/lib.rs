@@ -176,4 +176,31 @@ impl UserDatabase for Database {
         // Dummy implementation - return a dummy key
         Ok(format!("dummy_key_{}", record_id.0))
     }
+
+    async fn update_user_password(
+        &self,
+        user_id: Uuid,
+        password: PasswordHash,
+    ) -> Result<(), Self::Error> {
+        let mut lock = self.users.lock().await;
+        if let Some(user) = lock.iter_mut().find(|u| u.id == user_id) {
+            user.password_hash = password;
+            Ok(())
+        } else {
+            Err(Error::UserNotFound)
+        }
+    }
+
+    async fn get_user_by_username_or_email(
+        &self,
+        username_or_email: &str,
+    ) -> Result<Option<UserEntry>, Self::Error> {
+        Ok(self
+            .users
+            .lock()
+            .await
+            .iter()
+            .find(|user| user.username == username_or_email || user.email == username_or_email)
+            .cloned())
+    }
 }

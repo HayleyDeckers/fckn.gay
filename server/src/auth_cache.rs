@@ -40,6 +40,19 @@ pub struct AuthenticationCache {
     db: RwLock<BTreeMap<String, LoginToken>>,
 }
 
+/// Newtype wrapper so axum's `FromRef` can distinguish the password-reset cache
+/// from the login-session cache — they're both `AuthenticationCache` under the hood
+/// but we need separate `FromRef` impls so `State(…)` grabs the right one.
+#[derive(Clone)]
+pub struct PasswordResetCache(pub Arc<AuthenticationCache>);
+
+impl std::ops::Deref for PasswordResetCache {
+    type Target = AuthenticationCache;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl AuthenticationCache {
     pub fn new() -> Self {
         Self {
@@ -93,6 +106,11 @@ impl AuthenticationCache {
             self.db.write().await.remove(token);
         }
         None
+    }
+
+    pub async fn invalidate_all_tokens_for_user(&self, user_id: Uuid) {
+        let mut wlock = self.db.write().await;
+        wlock.retain(|_, token| token.user_id() != user_id);
     }
 }
 
