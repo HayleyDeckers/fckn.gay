@@ -93,6 +93,18 @@ impl AuthenticationCache {
         Some(token)
     }
 
+    /// Atomically removes a token and returns (username, user_id) if it was valid.
+    /// Prevents race conditions where two concurrent requests could both validate
+    /// the same token.
+    pub async fn take_valid_token(&self, token: &str) -> Option<(String, Uuid)> {
+        let removed = self.db.write().await.remove(token)?;
+        if removed.is_valid() {
+            Some((removed.username().to_string(), removed.user_id()))
+        } else {
+            None
+        }
+    }
+
     pub async fn get_user_from_token(&self, token: &str) -> Option<(String, Uuid)> {
         let should_remove = {
             let rlock = self.db.read().await;
