@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Instant};
 
 use anyhow::anyhow;
 use axum::{
+    Json,
     extract::{Form, State},
     http::StatusCode,
 };
@@ -15,6 +16,7 @@ use serde::{Deserialize, Deserializer};
 use crate::{
     auth_cache::{AuthenticationCache, PasswordResetCache},
     error::AppError,
+    interfaces::ServerAddress,
 };
 
 #[derive(serde::Deserialize)]
@@ -26,15 +28,22 @@ pub async fn request_password_reset(
     State(email): State<Arc<Email>>,
     State(password_reset_cache): State<PasswordResetCache>,
     State(user_database): State<Arc<UserDatabase>>,
+    State(address): State<ServerAddress>,
     Form(form): Form<PasswordReset>,
 ) -> Result<StatusCode, AppError> {
-    // grab user from user_database, by username or email
+    log::info!("Password reset requested for '{}'", &form.username_or_email);
     if let Some(user) = user_database
         .get_user_by_username_or_email(&form.username_or_email)
         .await?
     {
-        // if user found,
-        //  - generate the password reset token and add it to the password reset cache
+        if !user.is_active() {
+            log::warn!(
+                "Password reset requested for non-active user '{}' (state: {:?})",
+                &user.username,
+                user.state
+            );
+            return Ok(StatusCode::OK);
+        }
         let password_reset_token = password_reset_cache
             .new_token_for(
                 user.username.clone(),
@@ -46,7 +55,6 @@ pub async fn request_password_reset(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 anyhow!("Failed to generate password reset token"),
             ))?;
-        //  - send email with reset link
         email
             .send_email(
                 "im@fckn.gay",
@@ -54,16 +62,15 @@ pub async fn request_password_reset(
                 "Reset your password",
                 &format!(
                     "Hello {},\n\
-                Someone (hopefully you) has requested a password reset for your account at fckn.gay.\n\
-                Please click the following link to reset your password:\n\
-                (if you did not request a password reset, please ignore this email)\n\
-                http://127.0.0.1:8080/reset-password/?token={password_reset_token}\n",
+                    Someone (hopefully you) has requested a password reset for your account at fckn.gay.\n\
+                    Please click the following link to reset your password:\n\
+                    (if you did not request a password reset, please ignore this email)\n\
+                    http://{address}/reset-password/?token={password_reset_token}\n",
                     &user.username
                 ),
             )
             .await?;
     }
-    // return an ok response, even if user is not found
     Ok(StatusCode::OK)
 }
 
@@ -94,28 +101,19 @@ pub async fn reset_password(
     State(user_database): State<Arc<UserDatabase>>,
     State(auth_cache): State<Arc<AuthenticationCache>>,
     Form(form): Form<HandlePasswordReset>,
-) -> Result<StatusCode, AppError> {
-    // check that the token is valid (present in password reset cache and not expired)
-    let (_username, user_id) = password_reset_cache
-        .get_user_from_token(&form.token)
+) -> Result<Json<String>, AppError> {
+    // Atomically remove the token so concurrent requests can't both succeed
+    let (username, user_id) = password_reset_cache
+        .take_valid_token(&form.token)
         .await
         .ok_or(AppError::new(
             StatusCode::UNAUTHORIZED,
             anyhow!("Invalid or expired password reset token"),
         ))?;
-    // invalidate the token from the password reset cache
-    password_reset_cache
-        .remove_token(&form.token)
-        .await
-        .ok_or(AppError::new(
-            StatusCode::UNAUTHORIZED,
-            anyhow!("Invalid or expired password reset token"),
-        ))?;
-    // update the user's password in the database
     user_database
         .update_user_password(user_id, PasswordHash::new(&form.new_password.0))
         .await?;
-    // invalidate existing logins
     auth_cache.invalidate_all_tokens_for_user(user_id).await;
-    Ok(StatusCode::OK)
+    log::info!("Password reset completed for user '{username}' (ID: {user_id})");
+    Ok(Json(username))
 }

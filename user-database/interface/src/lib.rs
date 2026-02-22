@@ -153,15 +153,6 @@ pub trait UserDatabase {
     }
 
     #[allow(unused_variables)]
-    fn update_user<F: FnOnce(UserEntry) -> Result<UserEntry, Self::Error>>(
-        &self,
-        user_id: Uuid,
-        f: F,
-    ) -> impl Future<Output = Result<(), Self::Error>> {
-        async { todo!("update_user is not implemented") }
-    }
-
-    #[allow(unused_variables)]
     fn get_user_by_username_or_email(
         &self,
         username_or_email: &str,

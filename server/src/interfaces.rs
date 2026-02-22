@@ -9,6 +9,17 @@ use serde::{Deserialize, Deserializer};
 
 use crate::auth_cache::{AuthenticationCache, PasswordResetCache};
 
+/// The server's bind address, made available to handlers that need to construct
+/// self-referential URLs (e.g. password reset links).
+#[derive(Clone)]
+pub struct ServerAddress(Arc<String>);
+
+impl std::fmt::Display for ServerAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Rate limiting configuration for both auth (IP-based) and API (user-based) routes.
 /// All values are configurable through the server config file.
 #[derive(Clone, Debug, Deserialize)]
@@ -121,6 +132,8 @@ pub struct Interfaces {
     /// Small in-memory cache for password reset tokens
     /// not persisted to disk since they're short-lived and easily regenerated
     pub password_reset_cache: PasswordResetCache,
+    /// The address the server binds to, used for constructing URLs in emails etc.
+    pub address: ServerAddress,
 }
 
 impl FromRef<Interfaces> for Arc<Dns> {
@@ -155,6 +168,11 @@ impl FromRef<Interfaces> for PublicSuffix {
         state.hostname.clone()
     }
 }
+impl FromRef<Interfaces> for ServerAddress {
+    fn from_ref(state: &Interfaces) -> Self {
+        state.address.clone()
+    }
+}
 
 impl Interfaces {
     /// Creates a new instance of `Interfaces` with the given configuration.
@@ -183,6 +201,7 @@ impl Interfaces {
             hostname: config.public_suffix,
             rate_limit: config.rate_limit,
             password_reset_cache: PasswordResetCache(Arc::new(AuthenticationCache::new())),
+            address: ServerAddress(Arc::new(config.address)),
         })
     }
 }

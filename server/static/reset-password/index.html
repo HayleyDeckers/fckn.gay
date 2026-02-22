@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" href="../style.css">
+    <title>Reset Password</title>
+    <meta charset="utf-8" />
+    <script type="module">
+        import init from '../fckn_gay_validation.js';
+
+        let wasmModule = null;
+
+        async function initWasm() {
+            try {
+                wasmModule = await init('../fckn_gay_validation_bg.wasm');
+            } catch (error) {
+                console.error('Failed to load WASM module:', error);
+            }
+        }
+
+        initWasm();
+
+        function showFieldError(fieldId, errors) {
+            const field = document.getElementById(fieldId);
+            const errorDiv = document.getElementById(fieldId + '_error');
+
+            if (errors.length > 0) {
+                field.style.borderColor = '#ff4444';
+                field.style.backgroundColor = '#ffe6e6';
+                if (errorDiv) {
+                    errorDiv.innerHTML = errors.join('<br>');
+                    errorDiv.style.display = 'block';
+                }
+            } else {
+                field.style.borderColor = '#44ff44';
+                field.style.backgroundColor = '#e6ffe6';
+                if (errorDiv) {
+                    errorDiv.style.display = 'none';
+                }
+            }
+        }
+
+        function shakeField(fieldId) {
+            const field = document.getElementById(fieldId);
+            field.style.animation = 'shake 0.5s ease-in-out';
+            setTimeout(() => { field.style.animation = ''; }, 500);
+        }
+
+        function setupValidation() {
+            const passwordField = document.getElementById('new_password_');
+            if (!passwordField) return;
+
+            passwordField.addEventListener('input', function () {
+                if (!wasmModule) return;
+                const result = wasmModule.validate_password_wasm(this.value);
+                showFieldError('new_password_', result);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('token');
+
+            if (!token) {
+                document.getElementById('reset_form').style.display = 'none';
+                const msg = document.getElementById('message');
+                msg.innerHTML = 'no reset token found in the URL 😭 did you click the right link?';
+                msg.style.color = '#ff4444';
+                msg.style.display = 'block';
+                return;
+            }
+
+            document.getElementById('token_').value = token;
+            setupValidation();
+        });
+
+        window.do_reset = async function () {
+            const element = document.getElementById("reset_form");
+            const form_data = new FormData(element);
+            const data = new URLSearchParams(form_data);
+
+            if (wasmModule) {
+                const password = form_data.get('new_password');
+                const validation = wasmModule.validate_password_wasm(password);
+                if (validation.length !== 0) {
+                    showFieldError('new_password_', validation);
+                    shakeField('new_password_');
+                    return;
+                }
+            }
+
+            const submitBtn = document.querySelector('input[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.value = "resetting...";
+
+            var response = await fetch("/reset-password", {
+                method: "POST",
+                body: data
+            });
+
+            const msg = document.getElementById("message");
+            if (response.ok) {
+                // populate the username field so the browser's password manager
+                // can associate this new password with the right account
+                try {
+                    const username = await response.json();
+                    document.getElementById('username_').value = username;
+                } catch (e) {}
+
+                msg.textContent = "password reset successfully! redirecting to login...";
+                msg.style.color = "#44aa44";
+                msg.style.display = "block";
+                element.style.display = "none";
+                setTimeout(() => { window.location.href = "/"; }, 2000);
+            } else if (response.status === 401) {
+                msg.innerHTML = 'this reset link is invalid or expired 💀 <a href="/forgot-password.html">request a new one?</a>';
+                msg.style.color = "#ff4444";
+                msg.style.display = "block";
+                submitBtn.disabled = false;
+                submitBtn.value = "reset password";
+            } else if (response.status === 429) {
+                msg.textContent = "too many attempts, chill for a sec 😭";
+                msg.style.color = "#ff4444";
+                msg.style.display = "block";
+                submitBtn.disabled = false;
+                submitBtn.value = "reset password";
+            } else {
+                msg.textContent = "something went wrong on our end, sorry 💀";
+                msg.style.color = "#ff4444";
+                msg.style.display = "block";
+                submitBtn.disabled = false;
+                submitBtn.value = "reset password";
+            }
+        }
+    </script>
+    <style>
+        .error-message {
+            color: #ff4444;
+            font-size: 0.9em;
+            margin-top: 4px;
+            display: none;
+        }
+
+        #message {
+            display: none;
+            margin-top: 1em;
+            padding: 1em;
+            border-radius: 12px;
+            background: #fff6f6cc;
+            font-size: 1.05em;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        #message a {
+            color: #6ec6ff;
+        }
+
+        .pw-manager-hint {
+            position: absolute;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>reset password</h1>
+    <form id="reset_form" action="javascript:do_reset()" method="post">
+        <input type="hidden" id="token_" name="token">
+        <input type="text" id="username_" autocomplete="username" class="pw-manager-hint" tabindex="-1" aria-hidden="true">
+        <label for="new_password_">new password:</label>
+        <input type="password" id="new_password_" name="new_password" autocomplete="new-password" required>
+        <div id="new_password__error" class="error-message"></div>
+        <input type="submit" value="reset password">
+    </form>
+    <div id="message"></div>
+    <a href="/">back to login</a>
+</body>
+
+</html>
