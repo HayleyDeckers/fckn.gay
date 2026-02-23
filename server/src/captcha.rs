@@ -40,7 +40,13 @@ impl TurnstileVerifier {
             form.push(("remoteip", ip));
         }
 
-        let resp = self.client.post(SITEVERIFY_URL).form(&form).send().await?;
+        let resp = self
+            .client
+            .post(SITEVERIFY_URL)
+            .form(&form)
+            .send()
+            .await?
+            .error_for_status()?;
 
         let body: SiteverifyResponse = resp.json().await?;
         if !body.success {

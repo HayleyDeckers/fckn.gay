@@ -1,14 +1,15 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use axum::{
-    extract::{ConnectInfo, Form, Path, State},
+    extract::{Form, FromRequest, Path, Request, State},
     http::StatusCode,
     response::Redirect,
 };
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseInterface};
 use fckn_gay_validation::{validate_password, validate_username};
+use tower_governor::key_extractor::{KeyExtractor, SmartIpKeyExtractor};
 
 use crate::{captcha::TurnstileVerifier, error::AppError};
 
@@ -26,10 +27,18 @@ pub async fn sign_up(
     State(turnstile): State<Option<Arc<TurnstileVerifier>>>,
     State(user_database): State<Arc<UserDatabase>>,
     State(email): State<Arc<Email>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Form(form): Form<Signup>,
+    request: Request,
 ) -> Result<StatusCode, AppError> {
-    // If Turnstile is configured, verify the captcha token before anything else
+    // Grab the client IP before consuming the request for form extraction.
+    // Uses the same SmartIpKeyExtractor as the rate limiter (x-forwarded-for → x-real-ip → peer).
+    let client_ip = SmartIpKeyExtractor
+        .extract(&request)
+        .ok()
+        .map(|k| k.to_string());
+    let Form(form): Form<Signup> = Form::from_request(request, &())
+        .await
+        .map_err(|e| AppError::new(StatusCode::BAD_REQUEST, anyhow!("bad form data: {e}")))?;
+
     if let Some(verifier) = &turnstile {
         let Some(token) = &form.cf_turnstile_response else {
             return Err(AppError::new(
@@ -37,11 +46,13 @@ pub async fn sign_up(
                 anyhow!("captcha token missing — are you a bot? 🤖"),
             ));
         };
-        let ip = addr.ip().to_string();
-        let ok = verifier
-            .verify(token, Some(&ip))
-            .await
-            .map_err(|e| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        let ip = client_ip.as_deref();
+        let ok = verifier.verify(token, ip).await.map_err(|e| {
+            AppError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                anyhow!("captcha verification service is having a moment 💀 try again later: {e}"),
+            )
+        })?;
         if !ok {
             return Err(AppError::new(
                 StatusCode::FORBIDDEN,
