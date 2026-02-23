@@ -7,7 +7,10 @@ use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseIntferface};
 use serde::{Deserialize, Deserializer};
 
-use crate::auth_cache::{AuthenticationCache, PasswordResetCache};
+use crate::{
+    auth_cache::{AuthenticationCache, PasswordResetCache},
+    captcha::TurnstileVerifier,
+};
 
 /// The server's bind address, made available to handlers that need to construct
 /// self-referential URLs (e.g. password reset links).
@@ -94,6 +97,12 @@ impl Display for PublicSuffix {
 }
 
 #[derive(Deserialize)]
+pub struct TurnstileConfig {
+    pub site_key: String,
+    pub secret_key: fckn_gay_secret::Secret,
+}
+
+#[derive(Deserialize)]
 pub struct Config {
     /// the address of the server
     pub address: String,
@@ -104,6 +113,9 @@ pub struct Config {
     /// Rate limiting settings - if not specified, uses sensible defaults
     #[serde(default)]
     pub rate_limit: RateLimitConfig,
+    /// Optional Cloudflare Turnstile captcha for sign-up protection.
+    /// If absent, sign-up works without captcha.
+    pub turnstile: Option<TurnstileConfig>,
 }
 
 impl Config {
@@ -134,6 +146,8 @@ pub struct Interfaces {
     pub password_reset_cache: PasswordResetCache,
     /// The address the server binds to, used for constructing URLs in emails etc.
     pub address: ServerAddress,
+    /// Cloudflare Turnstile captcha verifier — None means captcha is disabled
+    pub turnstile: Option<Arc<TurnstileVerifier>>,
 }
 
 impl FromRef<Interfaces> for Arc<Dns> {
@@ -174,6 +188,12 @@ impl FromRef<Interfaces> for ServerAddress {
     }
 }
 
+impl FromRef<Interfaces> for Option<Arc<TurnstileVerifier>> {
+    fn from_ref(state: &Interfaces) -> Self {
+        state.turnstile.clone()
+    }
+}
+
 impl Interfaces {
     /// Creates a new instance of `Interfaces` with the given configuration.
     pub fn new(config: Config) -> Result<Self> {
@@ -193,6 +213,14 @@ impl Interfaces {
             config.rate_limit.api_per_seconds
         );
 
+        let turnstile = config.turnstile.map(|tc| {
+            log::info!("Turnstile captcha enabled (site_key={})", tc.site_key);
+            Arc::new(TurnstileVerifier::new(tc.site_key, tc.secret_key))
+        });
+        if turnstile.is_none() {
+            log::info!("Turnstile captcha disabled — sign-up is unprotected");
+        }
+
         Ok(Interfaces {
             dns,
             user_database,
@@ -202,6 +230,7 @@ impl Interfaces {
             rate_limit: config.rate_limit,
             password_reset_cache: PasswordResetCache(Arc::new(AuthenticationCache::new())),
             address: ServerAddress(Arc::new(config.address)),
+            turnstile,
         })
     }
 }

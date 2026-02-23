@@ -1,6 +1,7 @@
 mod api;
 mod auth;
 mod auth_cache;
+mod captcha;
 mod error;
 mod interfaces;
 mod rate_limit;
@@ -57,6 +58,10 @@ async fn main() -> Result<()> {
             user_routes::router(interfaces.clone(), "server/static/u"),
         ))
         .merge(axum::Router::new().nest("/api", api::router(interfaces.clone())))
+        .route(
+            "/api/captcha-config",
+            axum::routing::get(captcha::captcha_config),
+        )
         // WASM files with correct MIME type
         .merge(axum::Router::new().route(
             "/fckn_gay_validation_bg.wasm",
