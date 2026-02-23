@@ -38,10 +38,12 @@ pub async fn sign_up(
             ));
         };
         let ip = addr.ip().to_string();
-        let ok = verifier
-            .verify(token, Some(&ip))
-            .await
-            .map_err(|e| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        let ok = verifier.verify(token, Some(&ip)).await.map_err(|e| {
+            AppError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                anyhow!("captcha verification service is having a moment 💀 try again later: {e}"),
+            )
+        })?;
         if !ok {
             return Err(AppError::new(
                 StatusCode::FORBIDDEN,

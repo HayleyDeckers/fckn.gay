@@ -54,7 +54,11 @@
                             appearance: 'interaction-only',
                             callback: () => setSubmitLoading(false),
                             'expired-callback': () => setSubmitLoading(true),
-                            'error-callback': () => setSubmitLoading(false),
+                            'error-callback': () => {
+                                setSubmitLoading(true);
+                                const btn = document.getElementById('submit_btn');
+                                if (btn) btn.value = 'captcha broke 😭 try refreshing';
+                            },
                         });
                     }
                 });
