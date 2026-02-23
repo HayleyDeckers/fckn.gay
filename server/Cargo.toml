@@ -11,6 +11,7 @@ workspace = true
 # interfaces
 fckn-gay-dns.workspace = true
 fckn-gay-email.workspace = true
+fckn-gay-secret.workspace = true
 fckn-gay-user-database.workspace = true
 fckn-gay-validation.workspace = true
 
@@ -22,6 +23,7 @@ env_logger.workspace = true
 getrandom.workspace = true
 governor.workspace = true
 log.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 toml.workspace = true

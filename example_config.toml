@@ -80,6 +80,22 @@ password = "[password]"
 # password = { env = "SMTP_PASSWORD" }
 # password = { file = "secrets/smtp_password.txt" }
 
+# Optional Cloudflare Turnstile captcha for sign-up protection.
+# When enabled, the sign-up form will show a Turnstile widget and the server
+# will verify the token before creating an account.
+# If this section is absent, sign-up works without captcha.
+#
+# Get your keys at https://dash.cloudflare.com/?to=/:account/turnstile
+# For local testing, Cloudflare provides test keys:
+#   site_key    = "1x00000000000000000000AA"  (always passes)
+#   secret_key  = "1x0000000000000000000000000000000AA"  (always passes)
+#
+[turnstile]
+site_key = "1x00000000000000000000AA"
+secret_key = "1x0000000000000000000000000000000AA"
+# # secret_key = { env = "TURNSTILE_SECRET_KEY" }
+# secret_key = { file = "secrets/turnstile_secret.txt" }
+
 # Rate limiting to prevent abuse and brute-force attacks
 # Rate limit info is exposed via X-RateLimit-* headers so clients can auto-backoff
 [rate_limit]

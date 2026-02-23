@@ -8,6 +8,7 @@ notes.md
 TODO.md
 *.db
 AGENTS.md
+secrets/
 
 # generated WASM files
 validation/pkg/

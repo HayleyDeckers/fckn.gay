@@ -9,6 +9,7 @@
         import init, { validate_username_wasm, validate_password_wasm } from './fckn_gay_validation.js';
 
         let wasmModule = null;
+        let captchaEnabled = false;
 
         // Initialize WASM module
         async function initWasm() {
@@ -26,6 +27,50 @@
         // Initialize on page load
         initWasm();
 
+        // Conditionally load Turnstile captcha if the server has it enabled
+        async function initCaptcha() {
+            try {
+                const resp = await fetch('/api/captcha-config');
+                const config = await resp.json();
+                if (!config.enabled) return;
+                captchaEnabled = true;
+                setSubmitLoading(true);
+
+                // Dynamically load the Turnstile script
+                const script = document.createElement('script');
+                script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+                script.async = true;
+                script.defer = true;
+                document.head.appendChild(script);
+
+                // Render the widget container inside the form once DOM is ready
+                script.addEventListener('load', () => {
+                    const container = document.getElementById('turnstile_container');
+                    if (container) {
+                        container.innerHTML = '';
+                        turnstile.render(container, {
+                            sitekey: config.site_key,
+                            theme: 'light',
+                            appearance: 'interaction-only',
+                            callback: () => setSubmitLoading(false),
+                            'expired-callback': () => setSubmitLoading(true),
+                            'error-callback': () => setSubmitLoading(false),
+                        });
+                    }
+                });
+            } catch (e) {
+                console.warn('Could not load captcha config, proceeding without:', e);
+            }
+        }
+        initCaptcha();
+
+
+        function setSubmitLoading(loading) {
+            const btn = document.getElementById('submit_btn');
+            if (!btn) return;
+            btn.disabled = loading;
+            btn.value = loading ? 'verifying you\'re human...' : 'Sign Up';
+        }
 
         // Error display functions
         function showFieldError(fieldId, errors) {
@@ -129,6 +174,12 @@
                 alert("Signup successful! Please check your email to verify your account.");
             } else if (response.status == 409) {
                 alert("Username already taken. Please choose another.");
+            } else if (response.status == 403) {
+                alert("Captcha verification failed, are you a bot? 🤖");
+                if (typeof turnstile !== 'undefined') {
+                    setSubmitLoading(true);
+                    turnstile.reset();
+                }
             } else {
                 alert("Signup failed. Please try again.");
             }
@@ -191,7 +242,9 @@
         <label for="email_">email:</label>
         <input type="email" id="email_" name="email"><br><br>
 
-        <input type="submit" value="Sign Up">
+        <div id="turnstile_container"></div>
+
+        <input type="submit" id="submit_btn" value="Sign Up">
     </form>
     already have an account? <a href="./index.html"> go to login</a>
 </body>

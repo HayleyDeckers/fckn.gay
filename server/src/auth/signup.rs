@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::anyhow;
 use axum::{
-    extract::{Form, Path, State},
+    extract::{ConnectInfo, Form, Path, State},
     http::StatusCode,
     response::Redirect,
 };
@@ -10,20 +10,46 @@ use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseInterface};
 use fckn_gay_validation::{validate_password, validate_username};
 
-use crate::error::AppError;
+use crate::{captcha::TurnstileVerifier, error::AppError};
 
 #[derive(serde::Deserialize)]
 pub struct Signup {
     username: String,
     password: String,
     email: String,
+    /// Turnstile token — present when captcha is enabled on the frontend
+    #[serde(rename = "cf-turnstile-response", default)]
+    cf_turnstile_response: Option<String>,
 }
 
 pub async fn sign_up(
+    State(turnstile): State<Option<Arc<TurnstileVerifier>>>,
     State(user_database): State<Arc<UserDatabase>>,
     State(email): State<Arc<Email>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Form(form): Form<Signup>,
 ) -> Result<StatusCode, AppError> {
+    // If Turnstile is configured, verify the captcha token before anything else
+    if let Some(verifier) = &turnstile {
+        let Some(token) = &form.cf_turnstile_response else {
+            return Err(AppError::new(
+                StatusCode::FORBIDDEN,
+                anyhow!("captcha token missing — are you a bot? 🤖"),
+            ));
+        };
+        let ip = addr.ip().to_string();
+        let ok = verifier
+            .verify(token, Some(&ip))
+            .await
+            .map_err(|e| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        if !ok {
+            return Err(AppError::new(
+                StatusCode::FORBIDDEN,
+                anyhow!("captcha verification failed — try again maybe? 🤔"),
+            ));
+        }
+    }
+
     if !user_database.is_available(&form.username).await {
         return Ok(StatusCode::CONFLICT);
     }
