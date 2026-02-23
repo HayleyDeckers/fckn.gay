@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use axum::{Json, extract::State};
+use fckn_gay_secret::Secret;
 use serde::{Deserialize, Serialize};
 
 const SITEVERIFY_URL: &str = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -15,7 +16,7 @@ const SITEVERIFY_URL: &str = "https://challenges.cloudflare.com/turnstile/v0/sit
 /// Built once at startup from `TurnstileConfig`, then shared via `Arc`.
 pub struct TurnstileVerifier {
     site_key: String,
-    secret_key: String,
+    secret_key: Secret,
     client: reqwest::Client,
 }
 
@@ -23,7 +24,7 @@ impl TurnstileVerifier {
     pub fn new(site_key: String, secret_key: fckn_gay_secret::Secret) -> Self {
         Self {
             site_key,
-            secret_key: secret_key.into_exposed(),
+            secret_key,
             client: reqwest::Client::new(),
         }
     }
@@ -34,7 +35,7 @@ impl TurnstileVerifier {
 
     /// Asks Cloudflare whether the token the client submitted is legit.
     pub async fn verify(&self, token: &str, remote_ip: Option<&str>) -> anyhow::Result<bool> {
-        let mut form = vec![("secret", self.secret_key.as_str()), ("response", token)];
+        let mut form = vec![("secret", self.secret_key.expose()), ("response", token)];
         if let Some(ip) = remote_ip {
             form.push(("remoteip", ip));
         }
