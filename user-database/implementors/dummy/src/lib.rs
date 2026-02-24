@@ -146,16 +146,16 @@ impl UserDatabase for Database {
         record: DnsRecord,
         provider_key: String,
     ) -> Result<DnsRecordId, Self::Error> {
-        let record_id = DnsRecordId(uuid::Uuid::new_v4());
+        let id = DnsRecordId(uuid::Uuid::new_v4());
         let mut lock = self.records.lock().await;
         lock.entry(user_id)
             .or_insert_with(Vec::new)
             .push(DatabaseDnsRecord {
-                id: record_id.clone(),
+                id,
                 provider_key: provider_key.clone(),
                 record: record.clone(),
             });
-        Ok(record_id)
+        Ok(id)
     }
 
     #[allow(unused_variables)]
