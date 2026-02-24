@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::Arc};
+use std::{fmt::Display, path::Path, sync::Arc};
 
 use anyhow::{Context, Result};
 use axum::extract::FromRef;
@@ -120,7 +120,7 @@ pub struct Config {
 
 impl Config {
     /// Loads the configuration from a file.
-    pub fn load_from_file(path: &str) -> Result<Self, std::io::Error> {
+    pub fn load_from_file<P: AsRef<Path>>(path: &P) -> Result<Self, std::io::Error> {
         let config_str = std::fs::read_to_string(path)?;
         toml::from_str(&config_str)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
