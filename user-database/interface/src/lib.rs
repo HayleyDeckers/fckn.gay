@@ -59,7 +59,7 @@ impl UserEntry {
 }
 
 // DNS record types for user-database
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct DnsRecordId(pub Uuid);
 
 impl DnsRecordId {

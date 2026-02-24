@@ -9,6 +9,7 @@ use fckn_gay_user_database_interface::{
 /// does not support persisting new users to file
 pub struct Database {
     users: tokio::sync::Mutex<Vec<UserEntry>>,
+    records: tokio::sync::Mutex<HashMap<(Uuid, DnsRecordId), (String, DnsRecord)>>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -18,6 +19,7 @@ pub struct Config(HashMap<String, String>);
 pub enum Error {
     UserExists,
     UserNotFound,
+    RecordNotFound,
 }
 
 impl std::error::Error for Error {}
@@ -26,6 +28,7 @@ impl std::fmt::Display for Error {
         match self {
             Error::UserExists => write!(f, "user already exists"),
             Error::UserNotFound => write!(f, "user not found"),
+            Error::RecordNotFound => write!(f, "record not found"),
         }
     }
 }
@@ -55,6 +58,7 @@ impl UserDatabase for Database {
             .collect();
         Ok(Database {
             users: tokio::sync::Mutex::new(users),
+            records: tokio::sync::Mutex::new(HashMap::new()),
         })
     }
 
@@ -130,8 +134,17 @@ impl UserDatabase for Database {
         &self,
         user_id: Uuid,
     ) -> Result<Vec<fckn_gay_user_database_interface::DatabaseDnsRecord>, Self::Error> {
-        // Dummy implementation - return empty list
-        Ok(vec![])
+        let lock = self.records.lock().await;
+        let records = lock
+            .iter()
+            .filter(|((x, _), _)| *x == user_id)
+            .map(|x| fckn_gay_user_database_interface::DatabaseDnsRecord {
+                id: x.0.1.clone(),
+                provider_key: x.1.0.clone(),
+                record: x.1.1.clone(),
+            })
+            .collect();
+        Ok(records)
     }
 
     #[allow(unused_variables)]
@@ -141,8 +154,9 @@ impl UserDatabase for Database {
         record: DnsRecord,
         provider_key: String,
     ) -> Result<DnsRecordId, Self::Error> {
-        // Dummy implementation - generate a random ID
         let record_id = DnsRecordId(uuid::Uuid::new_v4());
+        let mut lock = self.records.lock().await;
+        lock.insert((user_id, record_id.clone()), (provider_key, record));
         Ok(record_id)
     }
 
@@ -153,7 +167,11 @@ impl UserDatabase for Database {
         record_id: DnsRecordId,
         record: DnsRecord,
     ) -> Result<(), Self::Error> {
-        // Dummy implementation - do nothing
+        let mut lock = self.records.lock().await;
+        let Some(entry) = lock.get(&(user_id, record_id.clone())).cloned() else {
+            return Err(Error::RecordNotFound);
+        };
+        lock.insert((user_id, record_id.clone()), (entry.0, record));
         Ok(())
     }
 
@@ -163,18 +181,23 @@ impl UserDatabase for Database {
         user_id: Uuid,
         record_id: DnsRecordId,
     ) -> Result<(), Self::Error> {
-        // Dummy implementation - do nothing
+        let mut lock = self.records.lock().await;
+        let Some(entry) = lock.remove(&(user_id, record_id.clone())) else {
+            return Err(Error::RecordNotFound);
+        };
         Ok(())
     }
 
-    #[expect(unused_variables)]
     async fn get_dns_record_provider_key(
         &self,
         user_id: Uuid,
         record_id: DnsRecordId,
     ) -> Result<String, Self::Error> {
-        // Dummy implementation - return a dummy key
-        Ok(format!("dummy_key_{}", record_id.0))
+        let lock = self.records.lock().await;
+        let Some(entry) = lock.get(&(user_id, record_id.clone())).cloned() else {
+            return Err(Error::RecordNotFound);
+        };
+        Ok(format!("dummy_key_{}", entry.0))
     }
 
     async fn update_user_password(
