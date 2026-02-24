@@ -44,8 +44,8 @@ fn silly_panic_handler(panic: Box<dyn Any + Send + 'static>) -> Response<Body> {
 #[command(version, about, long_about = None)]
 struct Args {
     /// Path to config file
-    #[arg(long)]
-    config: Option<PathBuf>,
+    #[arg(long, default_value = "config.toml")]
+    config: PathBuf,
 }
 
 #[tokio::main]
@@ -53,8 +53,7 @@ async fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let args = Args::parse();
 
-    let config_path = args.config.unwrap_or_else(|| PathBuf::from("config.toml"));
-    let config = Config::load_from_file(&config_path)?;
+    let config = Config::load_from_file(&args.config)?;
     let listener = tokio::net::TcpListener::bind(&config.address)
         .await
         .context("Failed to bind to address")?;
