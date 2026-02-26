@@ -73,6 +73,17 @@ pub struct Config {
 }
 
 impl Config {
+    /// Constructs a minimal all-dummy config. Requires the `dummy` feature.
+    #[cfg(feature = "dummy")]
+    pub fn dummy() -> Self {
+        Config {
+            provider: Some(Providers::Dummy),
+            dummy: Some(fckn_gay_dns_dummy::Config { entries: vec![] }),
+            porkbun: None,
+            hickory: None,
+        }
+    }
+
     /// Warns about provider configs that are present but won't be validated
     /// because the feature isn't compiled in.
     fn warn_uncompiled_providers(&self) {
@@ -175,6 +186,24 @@ pub struct Dns {
 }
 
 impl Dns {
+    /// Returns `true` if the active provider is the in-memory dummy.
+    pub fn is_dummy(&self) -> bool {
+        #[cfg(feature = "dummy")]
+        if matches!(self.active, ActiveDns::Dummy(_)) {
+            return true;
+        }
+        false
+    }
+
+    /// Returns `true` if the active provider is Hickory (local DNS server).
+    pub fn is_hickory(&self) -> bool {
+        #[cfg(feature = "hickory")]
+        if matches!(self.active, ActiveDns::Hickory(_)) {
+            return true;
+        }
+        false
+    }
+
     #[cfg(feature = "porkbun")]
     pub fn porkbun(&self) -> Result<&Porkbun, Error> {
         self.active

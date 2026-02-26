@@ -125,6 +125,20 @@ impl Config {
         toml::from_str(&config_str)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
+
+    /// Builds a fully-dummy config for local dev / testing.
+    /// Binds to 127.0.0.1:3000, uses in-memory providers for everything.
+    pub fn dummy() -> Self {
+        Config {
+            address: "127.0.0.1:3000".to_string(),
+            public_suffix: PublicSuffix::new("localhost".to_string()),
+            dns: fckn_gay_dns::Config::dummy(),
+            user_database: fckn_gay_user_database::Config::dummy(),
+            email: fckn_gay_email::Config::dummy(),
+            rate_limit: RateLimitConfig::default(),
+            turnstile: None,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -204,6 +218,16 @@ impl Interfaces {
         let user_database = Arc::new(user_database);
         let email = Email::new(config.email).context("Failed to create Email interface")?;
         let email = Arc::new(email);
+
+        // dummy DB + real DNS = data loss city 💀 DNS records will accumulate forever since the
+        // in-memory DB forgets everything on restart but Porkbun/etc keeps the actual records.
+        if user_database.is_dummy() && !dns.is_dummy() && !dns.is_hickory() {
+            log::warn!(
+                "⚠️  DANGEROUS CONFIG: dummy user database + real DNS provider! \
+                 DNS records created will be permanently lost on restart since the dummy DB \
+                 doesn't persist. Please use the dummy or hickory DNS provider for testing."
+            );
+        }
 
         log::info!(
             "Rate limiting configured: auth={}/{} burst/sec, api={}/{} burst/sec",
