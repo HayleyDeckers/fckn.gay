@@ -120,7 +120,7 @@ async fn delete_record(
     // Get the provider key from the database
     let provider_key = interfaces
         .user_database
-        .get_dns_record_provider_key(authenticed_for.user_id(), record_id.clone())
+        .get_dns_record_provider_key(authenticed_for.user_id(), record_id)
         .await
         .map_err(|e| {
             AppError::new(
@@ -188,7 +188,7 @@ async fn update_record(
     // Get the provider key from the database
     let provider_key = interfaces
         .user_database
-        .get_dns_record_provider_key(authenticed_for.user_id(), req.id.clone())
+        .get_dns_record_provider_key(authenticed_for.user_id(), req.id)
         .await
         .map_err(|e| {
             AppError::new(

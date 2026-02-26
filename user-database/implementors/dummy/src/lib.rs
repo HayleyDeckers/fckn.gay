@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use fckn_gay_user_database_interface::{
-    DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry, UserState, Uuid,
+    DatabaseDnsRecord, DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry, UserState,
+    Uuid,
 };
 
 /// a simple user database parsed directly from the configuration file.
@@ -9,15 +10,17 @@ use fckn_gay_user_database_interface::{
 /// does not support persisting new users to file
 pub struct Database {
     users: tokio::sync::Mutex<Vec<UserEntry>>,
+    records: tokio::sync::Mutex<BTreeMap<Uuid, Vec<DatabaseDnsRecord>>>,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct Config(HashMap<String, String>);
+pub struct Config(BTreeMap<String, String>);
 
 #[derive(Debug)]
 pub enum Error {
     UserExists,
     UserNotFound,
+    RecordNotFound,
 }
 
 impl std::error::Error for Error {}
@@ -26,6 +29,7 @@ impl std::fmt::Display for Error {
         match self {
             Error::UserExists => write!(f, "user already exists"),
             Error::UserNotFound => write!(f, "user not found"),
+            Error::RecordNotFound => write!(f, "record not found"),
         }
     }
 }
@@ -55,6 +59,7 @@ impl UserDatabase for Database {
             .collect();
         Ok(Database {
             users: tokio::sync::Mutex::new(users),
+            records: tokio::sync::Mutex::new(BTreeMap::new()),
         })
     }
 
@@ -130,8 +135,8 @@ impl UserDatabase for Database {
         &self,
         user_id: Uuid,
     ) -> Result<Vec<fckn_gay_user_database_interface::DatabaseDnsRecord>, Self::Error> {
-        // Dummy implementation - return empty list
-        Ok(vec![])
+        let lock = self.records.lock().await;
+        Ok(lock.get(&user_id).cloned().unwrap_or_default())
     }
 
     #[allow(unused_variables)]
@@ -141,9 +146,16 @@ impl UserDatabase for Database {
         record: DnsRecord,
         provider_key: String,
     ) -> Result<DnsRecordId, Self::Error> {
-        // Dummy implementation - generate a random ID
-        let record_id = DnsRecordId(uuid::Uuid::new_v4());
-        Ok(record_id)
+        let id = DnsRecordId(uuid::Uuid::new_v4());
+        let mut lock = self.records.lock().await;
+        lock.entry(user_id)
+            .or_insert_with(Vec::new)
+            .push(DatabaseDnsRecord {
+                id,
+                provider_key: provider_key.clone(),
+                record: record.clone(),
+            });
+        Ok(id)
     }
 
     #[allow(unused_variables)]
@@ -153,8 +165,17 @@ impl UserDatabase for Database {
         record_id: DnsRecordId,
         record: DnsRecord,
     ) -> Result<(), Self::Error> {
-        // Dummy implementation - do nothing
-        Ok(())
+        let mut lock = self.records.lock().await;
+        if let Some(entries) = lock.get_mut(&user_id) {
+            if let Some(entry) = entries.iter_mut().find(|entry| entry.id == record_id) {
+                entry.record = record;
+                Ok(())
+            } else {
+                Err(Error::RecordNotFound)
+            }
+        } else {
+            Err(Error::UserNotFound)
+        }
     }
 
     #[allow(unused_variables)]
@@ -163,18 +184,33 @@ impl UserDatabase for Database {
         user_id: Uuid,
         record_id: DnsRecordId,
     ) -> Result<(), Self::Error> {
-        // Dummy implementation - do nothing
-        Ok(())
+        let mut lock = self.records.lock().await;
+        if let Some(entries) = lock.get_mut(&user_id) {
+            if let Some(index) = entries.iter().position(|entry| entry.id == record_id) {
+                entries.remove(index);
+                Ok(())
+            } else {
+                Err(Error::RecordNotFound)
+            }
+        } else {
+            Err(Error::UserNotFound)
+        }
     }
 
-    #[expect(unused_variables)]
     async fn get_dns_record_provider_key(
         &self,
         user_id: Uuid,
         record_id: DnsRecordId,
     ) -> Result<String, Self::Error> {
-        // Dummy implementation - return a dummy key
-        Ok(format!("dummy_key_{}", record_id.0))
+        let lock = self.records.lock().await;
+        let Some(entry) = lock
+            .get(&user_id)
+            .and_then(|entries| entries.iter().find(|entry| entry.id == record_id))
+            .cloned()
+        else {
+            return Err(Error::RecordNotFound);
+        };
+        Ok(entry.provider_key)
     }
 
     async fn update_user_password(

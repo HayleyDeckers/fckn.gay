@@ -7,10 +7,11 @@ mod interfaces;
 mod rate_limit;
 mod user_routes;
 
-use std::{any::Any, net::SocketAddr};
+use std::{any::Any, net::SocketAddr, path::PathBuf};
 
 use anyhow::{Context, Result};
 use axum::{body::Body, response::Response};
+use clap::Parser;
 use interfaces::{Config, Interfaces};
 use tower_http::catch_panic::CatchPanicLayer;
 
@@ -39,11 +40,20 @@ fn silly_panic_handler(panic: Box<dyn Any + Send + 'static>) -> Response<Body> {
         .unwrap()
 }
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Path to config file
+    #[arg(long, default_value = "config.toml")]
+    config: PathBuf,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    let args = Args::parse();
 
-    let config = Config::load_from_file("config.toml")?;
+    let config = Config::load_from_file(&args.config)?;
     let listener = tokio::net::TcpListener::bind(&config.address)
         .await
         .context("Failed to bind to address")?;

@@ -138,12 +138,8 @@ impl UserDatabase for Database {
     ) -> Result<DnsRecordId, Self::Error> {
         use self::schema::dns_records::dsl::dns_records;
         let record_id = DnsRecordId::new();
-        let new_record = models::NewDnsRecord::from_interface(
-            record_id.clone(),
-            user_id,
-            &record,
-            &provider_key,
-        );
+        let new_record =
+            models::NewDnsRecord::from_interface(record_id, user_id, &record, &provider_key);
 
         let mut conn = self.connection.lock().await;
         diesel::insert_into(dns_records)

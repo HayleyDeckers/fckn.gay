@@ -19,6 +19,7 @@ fckn-gay-validation.workspace = true
 anyhow.workspace = true
 axum = { workspace = true, features = ["form", "http1", "http2", "json", "tokio"] }
 axum-extra = { workspace = true, features = ["cookie"] }
+clap = { version = "4.5.60", features = ["derive"] }
 env_logger.workspace = true
 getrandom.workspace = true
 governor.workspace = true
