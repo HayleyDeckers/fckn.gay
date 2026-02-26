@@ -60,6 +60,16 @@ pub struct Config {
 }
 
 impl Config {
+    /// Constructs a minimal all-dummy config (emails printed to stdout). Requires the `dummy` feature.
+    #[cfg(feature = "dummy")]
+    pub fn dummy() -> Self {
+        Config {
+            provider: Some(Providers::Dummy),
+            dummy: Some(fckn_gay_email_dummy::Config::default()),
+            lettre: None,
+        }
+    }
+
     /// Warns about provider configs that are present but won't be validated
     /// because the feature isn't compiled in.
     fn warn_uncompiled_providers(&self) {

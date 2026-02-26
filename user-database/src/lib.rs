@@ -41,6 +41,17 @@ pub enum Database {
     Diesel(DieselDatabase),
 }
 
+impl Database {
+    /// Returns `true` if the active provider is the in-memory dummy (data lost on restart!).
+    pub fn is_dummy(&self) -> bool {
+        #[cfg(feature = "dummy")]
+        if matches!(self, Database::Dummy(_)) {
+            return true;
+        }
+        false
+    }
+}
+
 impl<'de> Deserialize<'de> for Database {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -149,6 +160,17 @@ pub struct Config {
 }
 
 impl Config {
+    /// Constructs a minimal all-dummy config with no pre-seeded users. Requires the `dummy` feature.
+    #[cfg(feature = "dummy")]
+    pub fn dummy() -> Self {
+        Config {
+            provider: Some(Providers::Dummy),
+            dummy: Some(fckn_gay_user_database_dummy::Config::default()),
+            csv: None,
+            diesel: None,
+        }
+    }
+
     /// Warns about provider configs that are present but won't be validated
     /// because the feature isn't compiled in.
     fn warn_uncompiled_providers(&self) {

@@ -46,6 +46,9 @@ struct Args {
     /// Path to config file
     #[arg(long, default_value = "config.toml")]
     config: PathBuf,
+    /// Use in-memory dummy providers for everything (ignores --config).
+    #[arg(long)]
+    dummy: bool,
 }
 
 #[tokio::main]
@@ -53,7 +56,12 @@ async fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let args = Args::parse();
 
-    let config = Config::load_from_file(&args.config)?;
+    let config = if args.dummy {
+        log::info!("--dummy mode: using in-memory providers for everything, ignoring config file");
+        Config::dummy()
+    } else {
+        Config::load_from_file(&args.config)?
+    };
     let listener = tokio::net::TcpListener::bind(&config.address)
         .await
         .context("Failed to bind to address")?;

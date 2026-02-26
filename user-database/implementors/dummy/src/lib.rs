@@ -13,7 +13,7 @@ pub struct Database {
     records: tokio::sync::Mutex<BTreeMap<Uuid, Vec<DatabaseDnsRecord>>>,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Default, serde::Deserialize)]
 pub struct Config(BTreeMap<String, String>);
 
 #[derive(Debug)]
