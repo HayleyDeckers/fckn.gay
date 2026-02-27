@@ -5,9 +5,12 @@
     <link rel="stylesheet" href="../style.css">
     <meta charset="utf-8" />
     <script>
+        // Cached records so we can reference by index instead of
+        // interpolating user-controlled strings into onclick handlers
+        var cachedRecords = [];
+
         async function populate() {
             var table = document.getElementById("dns");
-            // Show spinner and empty row
             table.innerHTML = `<tr><th>record</th><th>type</th><th>content</th></tr>
                 <tr id="spinner-row">
                     <td colspan="3" style="text-align:center; height: 3em;">
@@ -18,7 +21,7 @@
 
             var response = await fetch("/api/dns/records");
             if (response.ok) {
-                var records = await response.json();
+                cachedRecords = await response.json();
             } else {
                 console.log("Failed to fetch records:", response.status, response.statusText);
                 if (response.status === 401) {
@@ -29,30 +32,43 @@
 
 
             table.innerHTML = "<tr><th>record</th><th>type</th><th>content</th><th>actions</th></tr>";
-            if (records.length === 0) {
+            if (cachedRecords.length === 0) {
                 var emptyRow = table.appendChild(document.createElement("tr"));
                 var emptyCell = emptyRow.appendChild(document.createElement("td"));
                 emptyCell.colSpan = 4;
                 emptyCell.style.textAlign = "center";
-                emptyCell.innerHTML = "No records found.";
+                emptyCell.textContent = "No records found.";
             }
-            for (var i = 0; i < records.length; i++) {
+            for (var i = 0; i < cachedRecords.length; i++) {
                 var row = table.appendChild(document.createElement("tr"));
                 var cell1 = row.appendChild(document.createElement("td"));
                 var cell2 = row.appendChild(document.createElement("td"));
                 var cell3 = row.appendChild(document.createElement("td"));
                 var cell4 = row.appendChild(document.createElement("td"));
 
-                // Access the nested record structure
-                cell1.innerHTML = records[i].record.name;
-                cell2.innerHTML = records[i].record.record_type;
-                cell3.innerHTML = records[i].record.content;
+                cell1.textContent = cachedRecords[i].record.name;
+                cell2.textContent = cachedRecords[i].record.record_type;
+                cell3.textContent = cachedRecords[i].record.content;
 
-                // Add action buttons
-                cell4.innerHTML = `
-                    <button onclick="editRecord('${records[i].id}', '${records[i].record.name}', '${records[i].record.record_type}', '${records[i].record.content}', ${records[i].record.ttl_seconds || 300}, ${records[i].record.priority || 0})" class="edit-btn">✏️</button>
-                    <button onclick="deleteRecord('${records[i].id}')" class="delete-btn">🗑️</button>
-                `;
+                var editBtn = document.createElement("button");
+                editBtn.className = "edit-btn";
+                editBtn.textContent = "✏️";
+                editBtn.dataset.index = i;
+                editBtn.addEventListener("click", function () {
+                    var r = cachedRecords[this.dataset.index];
+                    editRecord(r.id, r.record);
+                });
+
+                var deleteBtn = document.createElement("button");
+                deleteBtn.className = "delete-btn";
+                deleteBtn.textContent = "🗑️";
+                deleteBtn.dataset.id = cachedRecords[i].id;
+                deleteBtn.addEventListener("click", function () {
+                    deleteRecord(this.dataset.id);
+                });
+
+                cell4.appendChild(editBtn);
+                cell4.appendChild(deleteBtn);
             }
             // Add cute + button row
             var addRow = table.appendChild(document.createElement("tr"));
@@ -138,39 +154,51 @@
             }
         }
 
-        function editRecord(id, name, type, content, ttl, priority) {
+        function editRecord(id, record) {
+            const type = record.record_type;
+            const ttl = record.ttl_seconds || 300;
+            const priority = record.priority || 0;
+
             const container = document.getElementById('add-record-form-container');
+            // Build the form skeleton — no user data interpolated here
             container.innerHTML = `
             <form id="edit-record-form" class="silly rainbow-border" style="margin:1em 0;">
-                <input type="hidden" name="id" value="${id}">
-                <label>Name: <input type="text" name="name" value="${name}" required></label><br>
+                <input type="hidden" name="id">
+                <label>Name: <input type="text" name="name" required></label><br>
                 <label>Type: <select name="record_type">
-                    <option value="A" ${type === 'A' ? 'selected' : ''}>A</option>
-                    <option value="AAAA" ${type === 'AAAA' ? 'selected' : ''}>AAAA</option>
-                    <option value="CNAME" ${type === 'CNAME' ? 'selected' : ''}>CNAME</option>
-                    <option value="MX" ${type === 'MX' ? 'selected' : ''}>MX</option>
-                    <option value="TXT" ${type === 'TXT' ? 'selected' : ''}>TXT</option>
-                    <option value="NS" ${type === 'NS' ? 'selected' : ''}>NS</option>
-                    <option value="ALIAS" ${type === 'ALIAS' ? 'selected' : ''}>ALIAS</option>
-                    <option value="SRV" ${type === 'SRV' ? 'selected' : ''}>SRV</option>
-                    <option value="TLSA" ${type === 'TLSA' ? 'selected' : ''}>TLSA</option>
-                    <option value="CAA" ${type === 'CAA' ? 'selected' : ''}>CAA</option>
-                    <option value="HTTPS" ${type === 'HTTPS' ? 'selected' : ''}>HTTPS</option>
-                    <option value="SVCB" ${type === 'SVCB' ? 'selected' : ''}>SVCB</option>
+                    <option value="A">A</option>
+                    <option value="AAAA">AAAA</option>
+                    <option value="CNAME">CNAME</option>
+                    <option value="MX">MX</option>
+                    <option value="TXT">TXT</option>
+                    <option value="NS">NS</option>
+                    <option value="ALIAS">ALIAS</option>
+                    <option value="SRV">SRV</option>
+                    <option value="TLSA">TLSA</option>
+                    <option value="CAA">CAA</option>
+                    <option value="HTTPS">HTTPS</option>
+                    <option value="SVCB">SVCB</option>
                 </select></label><br>
-                <label>Content: <input type="text" name="content" value="${content}" required></label><br>
-                <label>TTL (seconds): <input type="number" name="ttl_seconds" value="${ttl}"></label><br>
-                <label>Priority: <input type="number" name="priority" value="${priority}"></label><br>
+                <label>Content: <input type="text" name="content" required></label><br>
+                <label>TTL (seconds): <input type="number" name="ttl_seconds"></label><br>
+                <label>Priority: <input type="number" name="priority"></label><br>
                 <input type="submit" value="Update Record">
                 <button type="button" onclick="hideAddRecordForm()">Cancel</button>
             </form>
         `;
+            // Set values via DOM so user-controlled strings never touch innerHTML
+            const form = document.getElementById('edit-record-form');
+            form.elements['id'].value = id;
+            form.elements['name'].value = record.name;
+            form.elements['record_type'].value = type;
+            form.elements['content'].value = record.content;
+            form.elements['ttl_seconds'].value = ttl;
+            form.elements['priority'].value = priority;
+
             container.style.display = '';
-            document.getElementById('edit-record-form').onsubmit = async function (e) {
+            form.onsubmit = async function (e) {
                 e.preventDefault();
-                const form = e.target;
                 const data = Object.fromEntries(new FormData(form));
-                data.record_type = data.record_type;
                 if (data.ttl_seconds) { data.ttl_seconds = parseInt(data.ttl_seconds) } else { data.ttl_seconds = null };
                 if (data.priority) { data.priority = parseInt(data.priority) } else { data.priority = null };
 
