@@ -53,7 +53,7 @@ jobs:
             toolchain: stable
             timeout: 5
             command: |
-              cargo install taplo-cli --locked --version ^0.8
+              cargo install taplo-cli --locked --version ^0.9
               taplo format --check 
     steps:
       - name: Checkout
