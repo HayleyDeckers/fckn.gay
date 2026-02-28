@@ -11,7 +11,7 @@ use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabase
 use fckn_gay_validation::{validate_password, validate_username};
 use tower_governor::key_extractor::{KeyExtractor, SmartIpKeyExtractor};
 
-use crate::{captcha::TurnstileVerifier, error::AppError};
+use crate::{captcha::TurnstileVerifier, error::AppError, interfaces::ServerAddress};
 
 #[derive(serde::Deserialize)]
 pub struct Signup {
@@ -27,6 +27,7 @@ pub async fn sign_up(
     State(turnstile): State<Option<Arc<TurnstileVerifier>>>,
     State(user_database): State<Arc<UserDatabase>>,
     State(email): State<Arc<Email>>,
+    State(address): State<ServerAddress>,
     request: Request,
 ) -> Result<StatusCode, AppError> {
     // Grab the client IP before consuming the request for form extraction.
@@ -102,7 +103,7 @@ pub async fn sign_up(
                 "Hello {},\n\
                 Thank you for signing up for an account at fckn.gay.\n\
                 Please click the following link to activate your account:\n\
-                http://127.0.0.1:8080/confirm-signup/{uuid:?}\n\
+                http://{address}/confirm-signup/{uuid:?}\n\
                 \n\
                 if you did not sign up for an account, please ignore this email.",
                 &form.username
