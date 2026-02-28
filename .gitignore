@@ -20,3 +20,4 @@ user-database/implementors/diesel/diesel.toml
 .cursor/screenshots/
 record.log
 
+.claude/settings.local.json
