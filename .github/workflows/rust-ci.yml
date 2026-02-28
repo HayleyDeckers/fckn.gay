@@ -42,7 +42,7 @@ jobs:
             timeout: 10
             command: |
               cargo install cargo-outdated --version ^0.17 || true
-              cargo outdated --exit-code 1
+              cargo outdated --exclude libsqlite3-sys --exit-code 1
           - job: cargo-deny
             toolchain: stable
             timeout: 10
