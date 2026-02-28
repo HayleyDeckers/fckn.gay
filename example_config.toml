@@ -96,6 +96,13 @@ secret_key = "1x0000000000000000000000000000000AA"
 # # secret_key = { env = "TURNSTILE_SECRET_KEY" }
 # secret_key = { file = "secrets/turnstile_secret.txt" }
 
+# Logging configuration
+# The level filter uses the same syntax as RUST_LOG directives
+# (e.g. "info", "debug", "my_crate=debug,tower_http=warn").
+# Invalid filter strings will cause the config to fail to parse :3
+[logging]
+level = "info"
+
 # Rate limiting to prevent abuse and brute-force attacks
 # Rate limit info is exposed via X-RateLimit-* headers so clients can auto-backoff
 [rate_limit]

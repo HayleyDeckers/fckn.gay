@@ -6,6 +6,7 @@ use fckn_gay_dns::{Dns, Interface as DnsInterface};
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseIntferface};
 use serde::{Deserialize, Deserializer};
+use tracing_subscriber::EnvFilter;
 
 use crate::{
     auth_cache::{AuthenticationCache, PasswordResetCache},
@@ -67,6 +68,44 @@ impl RateLimitConfig {
     }
 }
 
+/// A validated log filter directive string.
+/// Uses the same syntax as RUST_LOG (e.g. "info", "my_crate=debug,tower_http=warn").
+/// Validated at config parse time so typos blow up early :3
+#[derive(Clone, Debug)]
+pub struct LogFilter(EnvFilter);
+
+impl Default for LogFilter {
+    fn default() -> Self {
+        Self(EnvFilter::new("fckn_gay=debug,info"))
+    }
+}
+
+impl LogFilter {
+    /// Converts this validated filter string into a live [`EnvFilter`].
+    pub fn into_env_filter(self) -> EnvFilter {
+        self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for LogFilter {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        EnvFilter::try_new(&s)
+            .map_err(serde::de::Error::custom)
+            .map(LogFilter)
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct LoggingConfig {
+    /// the log level to filter by
+    #[serde(default)]
+    pub level: LogFilter,
+}
+
 #[derive(Clone)]
 pub struct PublicSuffix(Arc<String>);
 impl PublicSuffix {
@@ -110,6 +149,9 @@ pub struct Config {
     pub dns: <Dns as DnsInterface>::Config,
     pub user_database: <UserDatabase as UserDatabaseIntferface>::Config,
     pub email: <Email as EmailInterface>::Config,
+    /// Logging configuration - if not specified, uses sensible defaults
+    #[serde(default)]
+    pub logging: LoggingConfig,
     /// Rate limiting settings - if not specified, uses sensible defaults
     #[serde(default)]
     pub rate_limit: RateLimitConfig,
@@ -135,6 +177,7 @@ impl Config {
             dns: fckn_gay_dns::Config::dummy(),
             user_database: fckn_gay_user_database::Config::dummy(),
             email: fckn_gay_email::Config::dummy(),
+            logging: LoggingConfig::default(),
             rate_limit: RateLimitConfig::default(),
             turnstile: None,
         }
