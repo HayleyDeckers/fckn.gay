@@ -12,7 +12,8 @@ pub use fckn_gay_user_database_diesel::Database as DieselDatabase;
 #[cfg(feature = "dummy")]
 pub use fckn_gay_user_database_dummy::Database as DummyDatabase;
 pub use fckn_gay_user_database_interface::{
-    DatabaseDnsRecord, DnsRecordId, PasswordHash, UserDatabase as Interface, Uuid,
+    DatabaseDnsRecord, DnsRecordId, PasswordHash, UserDatabase as Interface, UserEntry, UserFields,
+    UserState, Uuid,
 };
 use serde::{Deserialize, Deserializer};
 
@@ -457,6 +458,108 @@ impl Interface for Database {
             #[cfg(feature = "diesel")]
             Database::Diesel(db) => db
                 .get_dns_record_provider_key(user_id, record_id)
+                .await
+                .map_err(Self::Error::Diesel),
+        }
+    }
+
+    async fn delete_user(&self, username: &str) -> Result<(), Self::Error> {
+        match self {
+            #[cfg(feature = "dummy")]
+            Database::Dummy(db) => db.delete_user(username).await.map_err(Self::Error::Dummy),
+            #[cfg(feature = "csv")]
+            Database::Csv(db) => db.delete_user(username).await.map_err(Self::Error::Csv),
+            #[cfg(feature = "diesel")]
+            Database::Diesel(db) => db.delete_user(username).await.map_err(Self::Error::Diesel),
+        }
+    }
+
+    async fn list_all_users(&self) -> Result<Vec<UserEntry>, Self::Error> {
+        match self {
+            #[cfg(feature = "dummy")]
+            Database::Dummy(db) => db.list_all_users().await.map_err(Self::Error::Dummy),
+            #[cfg(feature = "csv")]
+            Database::Csv(db) => db.list_all_users().await.map_err(Self::Error::Csv),
+            #[cfg(feature = "diesel")]
+            Database::Diesel(db) => db.list_all_users().await.map_err(Self::Error::Diesel),
+        }
+    }
+
+    async fn update_entry<F>(&self, user_id: Uuid, f: F) -> Result<(), Self::Error>
+    where
+        F: FnOnce(&mut UserFields) + Send,
+    {
+        match self {
+            #[cfg(feature = "dummy")]
+            Database::Dummy(db) => db
+                .update_entry(user_id, f)
+                .await
+                .map_err(Self::Error::Dummy),
+            #[cfg(feature = "csv")]
+            Database::Csv(db) => db.update_entry(user_id, f).await.map_err(Self::Error::Csv),
+            #[cfg(feature = "diesel")]
+            Database::Diesel(db) => db
+                .update_entry(user_id, f)
+                .await
+                .map_err(Self::Error::Diesel),
+        }
+    }
+
+    async fn update_user_email(&self, user_id: Uuid, email: &str) -> Result<(), Self::Error> {
+        match self {
+            #[cfg(feature = "dummy")]
+            Database::Dummy(db) => db
+                .update_user_email(user_id, email)
+                .await
+                .map_err(Self::Error::Dummy),
+            #[cfg(feature = "csv")]
+            Database::Csv(db) => db
+                .update_user_email(user_id, email)
+                .await
+                .map_err(Self::Error::Csv),
+            #[cfg(feature = "diesel")]
+            Database::Diesel(db) => db
+                .update_user_email(user_id, email)
+                .await
+                .map_err(Self::Error::Diesel),
+        }
+    }
+
+    async fn update_user_state(&self, user_id: Uuid, state: UserState) -> Result<(), Self::Error> {
+        match self {
+            #[cfg(feature = "dummy")]
+            Database::Dummy(db) => db
+                .update_user_state(user_id, state)
+                .await
+                .map_err(Self::Error::Dummy),
+            #[cfg(feature = "csv")]
+            Database::Csv(db) => db
+                .update_user_state(user_id, state)
+                .await
+                .map_err(Self::Error::Csv),
+            #[cfg(feature = "diesel")]
+            Database::Diesel(db) => db
+                .update_user_state(user_id, state)
+                .await
+                .map_err(Self::Error::Diesel),
+        }
+    }
+
+    async fn update_username(&self, user_id: Uuid, new_username: &str) -> Result<(), Self::Error> {
+        match self {
+            #[cfg(feature = "dummy")]
+            Database::Dummy(db) => db
+                .update_username(user_id, new_username)
+                .await
+                .map_err(Self::Error::Dummy),
+            #[cfg(feature = "csv")]
+            Database::Csv(db) => db
+                .update_username(user_id, new_username)
+                .await
+                .map_err(Self::Error::Csv),
+            #[cfg(feature = "diesel")]
+            Database::Diesel(db) => db
+                .update_username(user_id, new_username)
                 .await
                 .map_err(Self::Error::Diesel),
         }

@@ -2,7 +2,7 @@ mod models;
 mod schema;
 use diesel::prelude::*;
 use fckn_gay_user_database_interface::{
-    DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry, Uuid,
+    DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry, UserFields, UserState, Uuid,
 };
 
 #[derive(Debug, serde::Deserialize)]
@@ -258,6 +258,88 @@ impl UserDatabase for Database {
         Ok(record)
     }
 
+    async fn update_entry<F>(&self, user_id: Uuid, f: F) -> Result<(), Self::Error>
+    where
+        F: FnOnce(&mut UserFields) + Send,
+    {
+        let user_bytes = user_id.to_bytes_le();
+        let mut conn = self.connection.lock().await;
+        let raw = schema::users::dsl::users
+            .filter(schema::users::id.eq(&user_bytes))
+            .first::<models::RawUser>(&mut *conn)?;
+        let mut entry = UserEntry::from(raw);
+        f(&mut entry.fields);
+
+        let state_i32: i32 = match entry.fields.state {
+            UserState::Pending => 0,
+            UserState::Active => 1,
+            UserState::Inactive => 2,
+            UserState::Banned => 3,
+        };
+
+        diesel::update(schema::users::dsl::users.filter(schema::users::id.eq(&user_bytes)))
+            .set((
+                schema::users::username.eq(&entry.fields.username),
+                schema::users::email.eq(&entry.fields.email),
+                schema::users::password_hash.eq(entry.fields.password_hash.into_string()),
+                schema::users::state.eq(state_i32),
+                schema::users::last_login.eq(entry.fields.last_login),
+            ))
+            .execute(&mut *conn)?;
+        Ok(())
+    }
+
+    async fn update_user_email(&self, user_id: Uuid, new_email: &str) -> Result<(), Self::Error> {
+        let user_bytes = user_id.to_bytes_le();
+        let updated =
+            diesel::update(schema::users::dsl::users.filter(schema::users::id.eq(&user_bytes)))
+                .set(schema::users::email.eq(new_email))
+                .execute(&mut *self.connection.lock().await)?;
+        if updated == 0 {
+            Err(Error::Other(
+                "User not found, can't update email".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn update_user_state(&self, user_id: Uuid, state: UserState) -> Result<(), Self::Error> {
+        let state_i32: i32 = match state {
+            UserState::Pending => 0,
+            UserState::Active => 1,
+            UserState::Inactive => 2,
+            UserState::Banned => 3,
+        };
+        let user_bytes = user_id.to_bytes_le();
+        let updated =
+            diesel::update(schema::users::dsl::users.filter(schema::users::id.eq(&user_bytes)))
+                .set(schema::users::state.eq(state_i32))
+                .execute(&mut *self.connection.lock().await)?;
+        if updated == 0 {
+            Err(Error::Other(
+                "User not found, can't update state".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn update_username(&self, user_id: Uuid, new_username: &str) -> Result<(), Self::Error> {
+        let user_bytes = user_id.to_bytes_le();
+        let updated =
+            diesel::update(schema::users::dsl::users.filter(schema::users::id.eq(&user_bytes)))
+                .set(schema::users::username.eq(new_username))
+                .execute(&mut *self.connection.lock().await)?;
+        if updated == 0 {
+            Err(Error::Other(
+                "User not found, can't update username".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
     async fn update_user_password(
         &self,
         user_id: Uuid,
@@ -277,6 +359,13 @@ impl UserDatabase for Database {
         }
     }
 
+    async fn list_all_users(&self) -> Result<Vec<UserEntry>, Self::Error> {
+        use self::schema::users::dsl::users;
+        let mut conn = self.connection.lock().await;
+        let all = users.load::<models::RawUser>(&mut *conn)?;
+        Ok(all.into_iter().map(UserEntry::from).collect())
+    }
+
     async fn get_user_by_username_or_email(
         &self,
         username_or_email: &str,
@@ -291,8 +380,9 @@ impl UserDatabase for Database {
             )
             .load::<models::RawUser>(&mut *conn)?;
         if user.len() > 1 {
-            //this should never happen, usernames and emails should be unique
-            // and a valid email should never be a valid username
+            // this can happen if querying by email and multiple users have the same email
+            // should not really happen but happens when migrating as there are some users with
+            // multiple accounts, like me.
             return Err(Error::MultipleUsersFound);
         }
         Ok(user.into_iter().next().map(UserEntry::from))

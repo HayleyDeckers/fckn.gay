@@ -40,12 +40,14 @@ impl From<RawUser> for fckn_gay_user_database_interface::UserEntry {
         };
         Self {
             id,
-            username,
-            email,
-            password_hash,
-            state,
-            created_at,
-            last_login,
+            fields: fckn_gay_user_database_interface::UserFields {
+                username,
+                email,
+                password_hash,
+                state,
+                created_at,
+                last_login,
+            },
         }
     }
 }
