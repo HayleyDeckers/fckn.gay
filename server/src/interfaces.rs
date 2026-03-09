@@ -119,6 +119,12 @@ impl PublicSuffix {
     }
 }
 
+impl PublicSuffix {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 impl<'de> Deserialize<'de> for PublicSuffix {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
