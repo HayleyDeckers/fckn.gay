@@ -1,3 +1,5 @@
+use std::{fmt, str::FromStr};
+
 use serde::{Deserialize, Serialize};
 pub use uuid::Uuid;
 
@@ -31,10 +33,36 @@ pub enum UserState {
     Banned,
 }
 
-// uuid field is also the key for activating an account
+impl fmt::Display for UserState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UserState::Pending => write!(f, "pending"),
+            UserState::Active => write!(f, "active"),
+            UserState::Inactive => write!(f, "inactive"),
+            UserState::Banned => write!(f, "banned"),
+        }
+    }
+}
+
+impl FromStr for UserState {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "pending" => Ok(UserState::Pending),
+            "active" => Ok(UserState::Active),
+            "inactive" => Ok(UserState::Inactive),
+            "banned" => Ok(UserState::Banned),
+            other => Err(format!(
+                "unknown user state '{other}' (expected: pending, active, inactive, banned)"
+            )),
+        }
+    }
+}
+
+/// The mutable fields of a user entry -- everything except the immutable UUID.
 #[derive(Debug, Clone)]
-pub struct UserEntry {
-    pub id: Uuid,
+pub struct UserFields {
     pub username: String,
     pub password_hash: PasswordHash,
     pub email: String,
@@ -43,7 +71,7 @@ pub struct UserEntry {
     pub last_login: Option<chrono::NaiveDateTime>,
 }
 
-impl UserEntry {
+impl UserFields {
     pub fn is_active(&self) -> bool {
         matches!(self.state, UserState::Active)
     }
@@ -55,6 +83,20 @@ impl UserEntry {
     pub fn is_valid(&self, username: &str, password: &str) -> bool {
         // order is important here for short-circuiting to avoid unnecessary hashing
         self.is_active() && self.username == username && self.password_hash.validate(password)
+    }
+}
+
+// uuid field is also the key for activating an account
+#[derive(Debug, Clone)]
+pub struct UserEntry {
+    pub id: Uuid,
+    pub fields: UserFields,
+}
+
+impl std::ops::Deref for UserEntry {
+    type Target = UserFields;
+    fn deref(&self) -> &UserFields {
+        &self.fields
     }
 }
 
@@ -138,18 +180,59 @@ pub trait UserDatabase {
         async { todo!("delete_user is not implemented") }
     }
 
+    /// Returns all users in the database. Used by admin tooling (migration, etc).
+    fn list_all_users(&self) -> impl Future<Output = Result<Vec<UserEntry>, Self::Error>> {
+        async { todo!("list_all_users is not implemented") }
+    }
+
     #[allow(unused_variables)]
     fn activate_user(&self, uuid: Uuid) -> impl Future<Output = Result<(), Self::Error>> {
         async { todo!("activate_user is not implemented") }
     }
 
+    /// Generic entry update: loads the user by UUID, applies a closure to its
+    /// mutable fields, and persists the result. Implementors should override for
+    /// efficiency, but the default panics with `todo!`.
     #[allow(unused_variables)]
+    fn update_entry<F>(&self, user_id: Uuid, f: F) -> impl Future<Output = Result<(), Self::Error>>
+    where
+        F: FnOnce(&mut UserFields) + Send,
+    {
+        async { todo!("update_entry is not implemented") }
+    }
+
+    fn update_user_email(
+        &self,
+        user_id: Uuid,
+        email: &str,
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        let email = email.to_string();
+        self.update_entry(user_id, move |f| f.email = email)
+    }
+
+    fn update_user_state(
+        &self,
+        user_id: Uuid,
+        state: UserState,
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        self.update_entry(user_id, move |f| f.state = state)
+    }
+
+    fn update_username(
+        &self,
+        user_id: Uuid,
+        new_username: &str,
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        let new_username = new_username.to_string();
+        self.update_entry(user_id, move |f| f.username = new_username)
+    }
+
     fn update_user_password(
         &self,
         user_id: Uuid,
         password: PasswordHash,
     ) -> impl Future<Output = Result<(), Self::Error>> {
-        async { todo!("update_user_password is not implemented") }
+        self.update_entry(user_id, move |f| f.password_hash = password)
     }
 
     #[allow(unused_variables)]

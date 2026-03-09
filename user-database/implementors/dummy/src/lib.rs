@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use fckn_gay_user_database_interface::{
-    DatabaseDnsRecord, DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry, UserState,
-    Uuid,
+    DatabaseDnsRecord, DnsRecord, DnsRecordId, PasswordHash, UserDatabase, UserEntry, UserFields,
+    UserState, Uuid,
 };
 
 /// a simple user database parsed directly from the configuration file.
@@ -48,12 +48,14 @@ impl UserDatabase for Database {
                 let password_hash = PasswordHash::new(&password);
                 UserEntry {
                     id: Uuid::new_v4(),
-                    username: username.clone(),
-                    password_hash,
-                    email: format!("\"{username}\"@example.com"),
-                    state: UserState::Active,
-                    created_at: chrono::Utc::now().naive_utc(),
-                    last_login: None,
+                    fields: UserFields {
+                        username: username.clone(),
+                        password_hash,
+                        email: format!("\"{username}\"@example.com"),
+                        state: UserState::Active,
+                        created_at: chrono::Utc::now().naive_utc(),
+                        last_login: None,
+                    },
                 }
             })
             .collect();
@@ -108,12 +110,14 @@ impl UserDatabase for Database {
         let password_hash = PasswordHash::new(password);
         lock.push(UserEntry {
             id: user_id,
-            username: username.to_string(),
-            password_hash,
-            email: email.to_string(),
-            state: UserState::Pending,
-            created_at: chrono::Utc::now().naive_utc(),
-            last_login: None,
+            fields: UserFields {
+                username: username.to_string(),
+                password_hash,
+                email: email.to_string(),
+                state: UserState::Pending,
+                created_at: chrono::Utc::now().naive_utc(),
+                last_login: None,
+            },
         });
 
         Ok(user_id)
@@ -122,9 +126,9 @@ impl UserDatabase for Database {
     async fn activate_user(&self, uuid: Uuid) -> Result<(), Self::Error> {
         let mut lock = self.users.lock().await;
         if let Some(user) = lock.iter_mut().find(|user| user.id == uuid)
-            && user.state == UserState::Pending
+            && user.fields.state == UserState::Pending
         {
-            user.state = UserState::Active;
+            user.fields.state = UserState::Active;
             return Ok(());
         }
         Err(Error::UserNotFound)
@@ -213,18 +217,32 @@ impl UserDatabase for Database {
         Ok(entry.provider_key)
     }
 
-    async fn update_user_password(
-        &self,
-        user_id: Uuid,
-        password: PasswordHash,
-    ) -> Result<(), Self::Error> {
+    async fn update_entry<F>(&self, user_id: Uuid, f: F) -> Result<(), Self::Error>
+    where
+        F: FnOnce(&mut UserFields) + Send,
+    {
         let mut lock = self.users.lock().await;
         if let Some(user) = lock.iter_mut().find(|u| u.id == user_id) {
-            user.password_hash = password;
+            f(&mut user.fields);
             Ok(())
         } else {
             Err(Error::UserNotFound)
         }
+    }
+
+    async fn delete_user(&self, username: &str) -> Result<(), Self::Error> {
+        let mut lock = self.users.lock().await;
+        let before = lock.len();
+        lock.retain(|u| u.username != username);
+        if lock.len() == before {
+            Err(Error::UserNotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn list_all_users(&self) -> Result<Vec<UserEntry>, Self::Error> {
+        Ok(self.users.lock().await.clone())
     }
 
     async fn get_user_by_username_or_email(
