@@ -193,7 +193,7 @@ impl FromStr for Record {
 pub trait Dns {
     type Config: serde::de::DeserializeOwned;
     type Error: std::error::Error + Send + Sync + 'static;
-    type Key;
+    type Key: Clone;
 
     /// Creates a new instance of the DNS provider with the given configuration.
     fn new(config: Self::Config) -> Result<Self, Self::Error>

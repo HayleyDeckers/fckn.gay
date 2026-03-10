@@ -289,6 +289,7 @@ impl std::error::Error for Error {
     }
 }
 
+#[derive(Clone)]
 pub enum Key {
     #[cfg(feature = "porkbun")]
     Porkbun(<Porkbun as Interface>::Key),
