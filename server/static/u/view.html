@@ -121,7 +121,8 @@
                     hideAddRecordForm();
                     populate();
                 } else {
-                    alert('Failed to add record: ' + await res.text());
+                    const err = await res.json().catch(() => ({ error: res.statusText }));
+                    alert('Failed to add record: ' + err.error);
                 }
             };
         }
@@ -147,7 +148,8 @@
                 if (response.ok) {
                     populate(); // Refresh the table
                 } else {
-                    alert('Failed to delete record: ' + await response.text());
+                    const err = await response.json().catch(() => ({ error: response.statusText }));
+                    alert('Failed to delete record: ' + err.error);
                 }
             } catch (error) {
                 alert('Error deleting record: ' + error.message);
@@ -222,7 +224,8 @@
                     hideAddRecordForm();
                     populate();
                 } else {
-                    alert('Failed to update record: ' + await res.text());
+                    const err = await res.json().catch(() => ({ error: res.statusText }));
+                    alert('Failed to update record: ' + err.error);
                 }
             };
         }

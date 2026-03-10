@@ -1,17 +1,12 @@
 use std::sync::Arc;
 
-use anyhow::anyhow;
-use axum::{
-    extract::{Form, FromRequest, Path, Request, State},
-    http::StatusCode,
-    response::Redirect,
-};
+use axum::{extract::State, http::StatusCode, response::Redirect};
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseInterface};
 use fckn_gay_validation::{validate_password, validate_username};
 use tower_governor::key_extractor::{KeyExtractor, SmartIpKeyExtractor};
 
-use crate::{captcha::TurnstileVerifier, error::AppError, interfaces::ServerAddress};
+use crate::{captcha::TurnstileVerifier, error::AppError, extract, interfaces::ServerAddress};
 
 #[derive(serde::Deserialize)]
 pub struct Signup {
@@ -28,7 +23,7 @@ pub async fn sign_up(
     State(user_database): State<Arc<UserDatabase>>,
     State(email): State<Arc<Email>>,
     State(address): State<ServerAddress>,
-    request: Request,
+    request: axum::extract::Request,
 ) -> Result<StatusCode, AppError> {
     // Grab the client IP before consuming the request for form extraction.
     // Uses the same SmartIpKeyExtractor as the rate limiter (x-forwarded-for → x-real-ip → peer).
@@ -36,28 +31,29 @@ pub async fn sign_up(
         .extract(&request)
         .ok()
         .map(|k| k.to_string());
-    let Form(form): Form<Signup> = Form::from_request(request, &())
-        .await
-        .map_err(|e| AppError::new(StatusCode::BAD_REQUEST, anyhow!("bad form data: {e}")))?;
+    let extract::Form(form): extract::Form<Signup> =
+        <extract::Form<Signup> as axum::extract::FromRequest<_>>::from_request(request, &())
+            .await?;
 
     if let Some(verifier) = &turnstile {
         let Some(token) = &form.cf_turnstile_response else {
-            return Err(AppError::new(
+            return Err(AppError::message(
                 StatusCode::FORBIDDEN,
-                anyhow!("captcha token missing — are you a bot? 🤖"),
+                "captcha token missing — are you a bot? 🤖",
             ));
         };
         let ip = client_ip.as_deref();
         let ok = verifier.verify(token, ip).await.map_err(|e| {
-            AppError::new(
+            AppError::message(
                 StatusCode::SERVICE_UNAVAILABLE,
-                anyhow!("captcha verification service is having a moment 💀 try again later: {e}"),
+                "captcha verification service is having a moment 💀 try again later",
             )
+            .with_internal(e)
         })?;
         if !ok {
-            return Err(AppError::new(
+            return Err(AppError::message(
                 StatusCode::FORBIDDEN,
-                anyhow!("captcha verification failed — try again maybe? 🤔"),
+                "captcha verification failed — try again maybe? 🤔",
             ));
         }
     }
@@ -67,9 +63,9 @@ pub async fn sign_up(
     }
     let username_result = validate_username(&form.username);
     if !username_result.is_valid() {
-        return Err(AppError::new(
+        return Err(AppError::message(
             StatusCode::UNPROCESSABLE_ENTITY,
-            anyhow!(
+            format!(
                 "Username validation failed: {}",
                 username_result.errors().join(", ")
             ),
@@ -78,9 +74,9 @@ pub async fn sign_up(
 
     let password_result = validate_password(&form.password);
     if !password_result.is_valid() {
-        return Err(AppError::new(
+        return Err(AppError::message(
             StatusCode::UNPROCESSABLE_ENTITY,
-            anyhow!(
+            format!(
                 "Password validation failed: {}",
                 password_result.errors().join(", ")
             ),
@@ -116,9 +112,8 @@ pub async fn sign_up(
 
 pub async fn confirm_sign_up(
     State(user_database): State<Arc<UserDatabase>>,
-    Path(uuid): Path<fckn_gay_user_database::Uuid>,
+    axum::extract::Path(uuid): axum::extract::Path<fckn_gay_user_database::Uuid>,
 ) -> Result<Redirect, AppError> {
     user_database.activate_user(uuid).await?;
-    // redirect to home page
     Ok(Redirect::to("/"))
 }

@@ -1,11 +1,6 @@
 use std::{sync::Arc, time::Instant};
 
-use anyhow::anyhow;
-use axum::{
-    Json,
-    extract::{Form, State},
-    http::StatusCode,
-};
+use axum::{extract::State, http::StatusCode};
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{
     Database as UserDatabase, Interface as UserDatabaseInterface, PasswordHash,
@@ -16,6 +11,7 @@ use serde::{Deserialize, Deserializer};
 use crate::{
     auth_cache::{AuthenticationCache, PasswordResetCache},
     error::AppError,
+    extract::{Form, Json},
     interfaces::ServerAddress,
 };
 
@@ -51,9 +47,9 @@ pub async fn request_password_reset(
                 Instant::now() + std::time::Duration::from_secs(15 * 60),
             )
             .await
-            .ok_or(AppError::new(
+            .ok_or(AppError::message(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                anyhow!("Failed to generate password reset token"),
+                "failed to generate password reset token 💀",
             ))?;
         email
             .send_email(
@@ -106,9 +102,9 @@ pub async fn reset_password(
     let (username, user_id) = password_reset_cache
         .take_valid_token(&form.token)
         .await
-        .ok_or(AppError::new(
+        .ok_or(AppError::message(
             StatusCode::UNAUTHORIZED,
-            anyhow!("Invalid or expired password reset token"),
+            "invalid or expired password reset token",
         ))?;
     user_database
         .update_user_password(user_id, PasswordHash::new(&form.new_password.0))
