@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["dns", "email", "secret", "server", "user-database", "validation"]
+members = ["dns", "email", "logging", "secret", "server", "user-database", "validation"]
 
 [workspace.dependencies]
 #the core interfaces that are used by the server
@@ -13,6 +13,7 @@ members = ["dns", "email", "secret", "server", "user-database", "validation"]
 #   user-database: dummy (default), csv, diesel
 fckn-gay-dns = { path = "dns", default-features = true }
 fckn-gay-email = { path = "email", default-features = true }
+fckn-gay-logging = { path = "logging" }
 fckn-gay-secret = { path = "secret" }
 fckn-gay-user-database = { path = "user-database", default-features = true }
 fckn-gay-validation = { path = "validation" }
@@ -34,6 +35,7 @@ password-auth = "1.0"
 porkbun-api = { version = "1.0.4", default-features = false }
 reqwest = { version = "0.13", default-features = false, features = ["form", "json", "rustls"] }
 serde = { version = "1.0", features = ["derive"] }
+smallvec = "1"
 thiserror = "2.0"
 tokio = { version = "1", default-features = false }
 toml = { version = "0.8" }

@@ -11,6 +11,7 @@ workspace = true
 # interfaces
 fckn-gay-dns = { workspace = true, features = ["dummy"] }
 fckn-gay-email = { workspace = true, features = ["dummy"] }
+fckn-gay-logging.workspace = true
 fckn-gay-secret.workspace = true
 fckn-gay-user-database = { workspace = true, features = ["dummy"] }
 fckn-gay-validation.workspace = true
