@@ -83,7 +83,7 @@ async fn main() -> Result<()> {
         Config::load_from_file(&args.config)?
     };
 
-    telemetry::logging::init(config.logging.clone());
+    telemetry::logging::SubscriberBuilder::new(config.logging.clone()).init();
 
     // Log panics with tracing so they get span context + structured fields
     panic::set_hook(Box::new(|panic_info| {

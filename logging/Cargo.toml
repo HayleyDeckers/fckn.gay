@@ -1,0 +1,15 @@
+[package]
+name = "fckn-gay-logging"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono.workspace = true
+smallvec.workspace = true
+tracing.workspace = true
+tracing-log.workspace = true
+tracing-subscriber.workspace = true

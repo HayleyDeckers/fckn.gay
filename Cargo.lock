@@ -766,6 +766,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fckn-gay-logging"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "smallvec",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "fckn-gay-secret"
 version = "0.1.0"
 dependencies = [
@@ -783,6 +794,7 @@ dependencies = [
  "clap",
  "fckn-gay-dns",
  "fckn-gay-email",
+ "fckn-gay-logging",
  "fckn-gay-secret",
  "fckn-gay-user-database",
  "fckn-gay-validation",
