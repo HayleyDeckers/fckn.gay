@@ -176,16 +176,13 @@
             });
             if (response.ok) {
                 alert("Signup successful! Please check your email to verify your account.");
-            } else if (response.status == 409) {
-                alert("Username already taken. Please choose another.");
-            } else if (response.status == 403) {
-                alert("Captcha verification failed, are you a bot? 🤖");
-                if (typeof turnstile !== 'undefined') {
+            } else {
+                const err = await response.json().catch(() => ({ error: response.statusText }));
+                alert(err.error || "Signup failed. Please try again.");
+                if (response.status == 403 && typeof turnstile !== 'undefined') {
                     setSubmitLoading(true);
                     turnstile.reset();
                 }
-            } else {
-                alert("Signup failed. Please try again.");
             }
         }
     </script>

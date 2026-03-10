@@ -168,7 +168,7 @@ pub async fn add_authorization(state: &AuthenticationCache, request: &mut Reques
 }
 
 impl<S: Send + Sync + 'static> FromRequestParts<S> for AuthenticatedFor {
-    type Rejection = StatusCode;
+    type Rejection = crate::error::AppError;
     async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
         _: &S,
@@ -176,9 +176,11 @@ impl<S: Send + Sync + 'static> FromRequestParts<S> for AuthenticatedFor {
         parts
             .extensions
             .get::<AuthenticatedFor>()
-            //could we get rid of this clone?
             .cloned()
-            .ok_or(StatusCode::UNAUTHORIZED)
+            .ok_or(crate::error::AppError::message(
+                StatusCode::UNAUTHORIZED,
+                "not authenticated",
+            ))
     }
 }
 

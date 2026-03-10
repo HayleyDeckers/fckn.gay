@@ -4,6 +4,7 @@ mod auth_cache;
 mod captcha;
 mod cli_commands;
 mod error;
+mod extract;
 mod interfaces;
 mod rate_limit;
 mod telemetry;
@@ -17,28 +18,12 @@ use clap::Parser;
 use interfaces::{Config, Interfaces};
 use tower_http::catch_panic::CatchPanicLayer;
 
-/// Custom panic handler function that gives us those silly error messages 💀
-fn silly_panic_handler(panic: Box<dyn Any + Send + 'static>) -> Response<Body> {
-    // Extract the panic message if possible
-    let panic_message = if let Some(s) = panic.downcast_ref::<String>() {
-        s.clone()
-    } else if let Some(s) = panic.downcast_ref::<&str>() {
-        s.to_string()
-    } else {
-        "something went wrong".to_string()
-    };
-
-    let body = format!(
-        "server ded RIP 💀\n\n\
-        The server had a little oopsie: {}\n\n\
-        Don't worry, it's not your fault! The server is still running though, so you can try again.",
-        panic_message
-    );
-
+/// CatchPanicLayer handler — just returns the JSON response.
+fn panic_response(_panic: Box<dyn Any + Send + 'static>) -> Response<Body> {
     Response::builder()
         .status(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
-        .header("content-type", "text/plain; charset=utf-8")
-        .body(Body::from(body))
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"error":"server ded RIP 💀"}"#))
         .unwrap()
 }
 
@@ -181,7 +166,7 @@ async fn main() -> Result<()> {
                         .precompressed_deflate()
                         .precompressed_zstd(),
                 )
-                .layer(CatchPanicLayer::custom(silly_panic_handler))
+                .layer(CatchPanicLayer::custom(panic_response))
                 .with_state(interfaces);
 
             axum::serve(

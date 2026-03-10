@@ -1,14 +1,14 @@
 use std::{sync::Arc, time::Instant};
 
 use axum::{
-    extract::{Form, State},
+    extract::State,
     http::StatusCode,
     response::{IntoResponse, Redirect},
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseInterface};
 
-use crate::auth_cache::AuthenticationCache;
+use crate::{auth_cache::AuthenticationCache, error::AppError, extract::Form};
 
 #[derive(serde::Deserialize)]
 pub struct Login {
@@ -21,7 +21,7 @@ pub async fn login(
     State(auth_cache): State<Arc<AuthenticationCache>>,
     jar: CookieJar,
     Form(form): Form<Login>,
-) -> Result<CookieJar, StatusCode> {
+) -> Result<CookieJar, AppError> {
     if let Some(user_id) = user_database
         .validate_and_get_user_id(&form.username, &form.password)
         .await
@@ -33,7 +33,10 @@ pub async fn login(
                 Instant::now() + std::time::Duration::from_secs(60 * 60 * 4),
             )
             .await
-            .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+            .ok_or(AppError::message(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to create session 💀",
+            ))?;
         Ok(jar.add(
             Cookie::build(("login-token", token.clone()))
                 .domain("127.0.0.1")
@@ -41,7 +44,10 @@ pub async fn login(
                 .build(),
         ))
     } else {
-        Err(StatusCode::UNAUTHORIZED)
+        Err(AppError::message(
+            StatusCode::UNAUTHORIZED,
+            "invalid username or password",
+        ))
     }
 }
 
