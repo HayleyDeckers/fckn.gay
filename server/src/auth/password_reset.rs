@@ -31,13 +31,13 @@ pub async fn request_password_reset(
     State(address): State<ServerAddress>,
     Form(form): Form<PasswordReset>,
 ) -> Result<StatusCode, AppError> {
-    log::info!("Password reset requested for '{}'", &form.username_or_email);
+    tracing::info!("Password reset requested for '{}'", &form.username_or_email);
     if let Some(user) = user_database
         .get_user_by_username_or_email(&form.username_or_email)
         .await?
     {
         if !user.is_active() {
-            log::warn!(
+            tracing::warn!(
                 "Password reset requested for non-active user '{}' (state: {:?})",
                 &user.username,
                 user.state
@@ -114,6 +114,6 @@ pub async fn reset_password(
         .update_user_password(user_id, PasswordHash::new(&form.new_password.0))
         .await?;
     auth_cache.invalidate_all_tokens_for_user(user_id).await;
-    log::info!("Password reset completed for user '{username}' (ID: {user_id})");
+    tracing::info!("Password reset completed for user '{username}' (ID: {user_id})");
     Ok(Json(username))
 }

@@ -16,7 +16,7 @@ impl IntoResponse for AppError {
         }
 
         // Log API errors so we can see what's going wrong 👀
-        log::error!("API error ({}): {}", self.1.as_u16(), body);
+        tracing::error!("API error ({}): {}", self.1.as_u16(), body);
 
         (self.1, body).into_response()
     }

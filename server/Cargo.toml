@@ -22,7 +22,6 @@ axum-extra = { workspace = true, features = ["cookie"] }
 clap = { version = "4.5.60", features = ["derive"] }
 getrandom.workspace = true
 governor.workspace = true
-log.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
