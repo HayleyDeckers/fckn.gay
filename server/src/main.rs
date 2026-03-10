@@ -10,15 +10,16 @@ mod rate_limit;
 mod telemetry;
 mod user_routes;
 
-use std::{any::Any, net::SocketAddr, path::PathBuf};
+use std::{any::Any, net::SocketAddr, panic, path::PathBuf};
 
 use anyhow::{Context, Result};
 use axum::{body::Body, response::Response};
 use clap::Parser;
 use interfaces::{Config, Interfaces};
-use tower_http::catch_panic::CatchPanicLayer;
+use tower_http::{catch_panic::CatchPanicLayer, trace::TraceLayer};
 
 /// CatchPanicLayer handler — just returns the JSON response.
+/// Actual panic logging happens in the panic hook set in main().
 fn panic_response(_panic: Box<dyn Any + Send + 'static>) -> Response<Body> {
     Response::builder()
         .status(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -84,6 +85,18 @@ async fn main() -> Result<()> {
 
     telemetry::logging::init(config.logging.clone());
 
+    // Log panics with tracing so they get span context + structured fields
+    panic::set_hook(Box::new(|panic_info| {
+        let panic_message = panic_info
+            .payload_as_str()
+            .unwrap_or("[non-string panic payload]");
+        if let Some(location) = panic_info.location() {
+            tracing::error!(panic.location = %location, "PANIC: {panic_message}");
+        } else {
+            tracing::error!("PANIC: {panic_message}");
+        }
+    }));
+
     if args.dummy {
         tracing::info!(
             "--dummy mode: using in-memory providers for everything, ignoring config file"
@@ -132,6 +145,12 @@ async fn main() -> Result<()> {
                 .context("Failed to bind to address")?;
             tracing::info!("starting server on http://{address}");
 
+            let trace_layer = TraceLayer::new_for_http()
+                .make_span_with(telemetry::tracing_setup::MakeRequestSpan)
+                .on_request(())
+                .on_response(telemetry::tracing_setup::RecordStatusOnResponse)
+                .on_failure(());
+
             // Each module owns its middleware (auth, rate limiting, etc).
             // main.rs just wires the routers together.
             let app = auth::router(interfaces.clone())
@@ -167,6 +186,7 @@ async fn main() -> Result<()> {
                         .precompressed_zstd(),
                 )
                 .layer(CatchPanicLayer::custom(panic_response))
+                .layer(trace_layer)
                 .with_state(interfaces);
 
             axum::serve(

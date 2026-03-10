@@ -27,10 +27,10 @@ impl LoginToken {
     fn is_valid(&self) -> bool {
         self.expires_at > Instant::now()
     }
-    fn username(&self) -> &str {
+    pub fn username(&self) -> &str {
         &self.username
     }
-    fn user_id(&self) -> Uuid {
+    pub fn user_id(&self) -> Uuid {
         self.user_id
     }
 }
@@ -157,12 +157,15 @@ pub async fn add_authorization(state: &AuthenticationCache, request: &mut Reques
         // those are for the browser to care about
         let token = cookie.value();
         if let Some((username, user_id)) = state.get_user_from_token(token).await {
-            tracing::debug!("User {username} (ID: {user_id}) authorized with token {token}");
+            tracing::debug!(user = %username, user_id = %user_id, "authorized via token");
             request
                 .extensions_mut()
                 .insert(AuthenticatedFor::new(user_id, username));
             return true;
         }
+        tracing::trace!("login token present but invalid or expired");
+    } else {
+        tracing::trace!("no login-token cookie");
     }
     false
 }
@@ -188,11 +191,14 @@ pub async fn add_authorization_or_unauthorized(
     State(state): State<Arc<AuthenticationCache>>,
     mut request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, crate::error::AppError> {
     if add_authorization(&state, &mut request).await {
         Ok(next.run(request).await)
     } else {
-        Err(StatusCode::UNAUTHORIZED)
+        Err(crate::error::AppError::message(
+            StatusCode::UNAUTHORIZED,
+            "not authenticated",
+        ))
     }
 }
 

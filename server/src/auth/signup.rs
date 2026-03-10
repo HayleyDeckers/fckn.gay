@@ -4,9 +4,14 @@ use axum::{extract::State, http::StatusCode, response::Redirect};
 use fckn_gay_email::{Email, Interface as EmailInterface};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseInterface};
 use fckn_gay_validation::{validate_password, validate_username};
-use tower_governor::key_extractor::{KeyExtractor, SmartIpKeyExtractor};
+use tracing::Instrument;
 
-use crate::{captcha::TurnstileVerifier, error::AppError, extract, interfaces::ServerAddress};
+use crate::{
+    captcha::TurnstileVerifier,
+    error::AppError,
+    extract::{self, ClientIp},
+    interfaces::ServerAddress,
+};
 
 #[derive(serde::Deserialize)]
 pub struct Signup {
@@ -18,23 +23,15 @@ pub struct Signup {
     cf_turnstile_response: Option<String>,
 }
 
+#[tracing::instrument(skip_all, fields(user = %form.username))]
 pub async fn sign_up(
     State(turnstile): State<Option<Arc<TurnstileVerifier>>>,
     State(user_database): State<Arc<UserDatabase>>,
     State(email): State<Arc<Email>>,
     State(address): State<ServerAddress>,
-    request: axum::extract::Request,
+    ClientIp(client_ip): ClientIp,
+    extract::Form(form): extract::Form<Signup>,
 ) -> Result<StatusCode, AppError> {
-    // Grab the client IP before consuming the request for form extraction.
-    // Uses the same SmartIpKeyExtractor as the rate limiter (x-forwarded-for → x-real-ip → peer).
-    let client_ip = SmartIpKeyExtractor
-        .extract(&request)
-        .ok()
-        .map(|k| k.to_string());
-    let extract::Form(form): extract::Form<Signup> =
-        <extract::Form<Signup> as axum::extract::FromRequest<_>>::from_request(request, &())
-            .await?;
-
     if let Some(verifier) = &turnstile {
         let Some(token) = &form.cf_turnstile_response else {
             return Err(AppError::message(
@@ -43,13 +40,17 @@ pub async fn sign_up(
             ));
         };
         let ip = client_ip.as_deref();
-        let ok = verifier.verify(token, ip).await.map_err(|e| {
-            AppError::message(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "captcha verification service is having a moment 💀 try again later",
-            )
-            .with_internal(e)
-        })?;
+        let ok = verifier
+            .verify(token, ip)
+            .instrument(tracing::info_span!("captcha.verify"))
+            .await
+            .map_err(|e| {
+                AppError::message(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "captcha verification service is having a moment 💀 try again later",
+                )
+                .with_internal(e)
+            })?;
         if !ok {
             return Err(AppError::message(
                 StatusCode::FORBIDDEN,
@@ -58,8 +59,15 @@ pub async fn sign_up(
         }
     }
 
-    if !user_database.is_available(&form.username).await {
-        return Ok(StatusCode::CONFLICT);
+    if !user_database
+        .is_available(&form.username)
+        .instrument(tracing::info_span!("db.check_availability"))
+        .await
+    {
+        return Err(AppError::message(
+            StatusCode::CONFLICT,
+            "username already taken",
+        ));
     }
     let username_result = validate_username(&form.username);
     if !username_result.is_valid() {
@@ -84,12 +92,17 @@ pub async fn sign_up(
     }
 
     // this is safe for now since we do check in `add_user` but we can race.
-    let Ok(uuid) = user_database
+    let uuid = user_database
         .add_user(&form.username, &form.password, &form.email)
+        .instrument(tracing::info_span!("db.add_user"))
         .await
-    else {
-        return Ok(StatusCode::INTERNAL_SERVER_ERROR);
-    };
+        .map_err(|e| {
+            AppError::message(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to create user 💀",
+            )
+            .with_internal(e)
+        })?;
     email
         .send_email(
             "im@fckn.gay",
@@ -105,15 +118,22 @@ pub async fn sign_up(
                 &form.username
             ),
         )
+        .instrument(tracing::info_span!("email.send_confirmation"))
         .await?;
+    tracing::info!("signup successful, confirmation email sent");
     // todo(hayley): if email failed to send, delete the user from the database?
     Ok(StatusCode::CREATED)
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn confirm_sign_up(
     State(user_database): State<Arc<UserDatabase>>,
     axum::extract::Path(uuid): axum::extract::Path<fckn_gay_user_database::Uuid>,
 ) -> Result<Redirect, AppError> {
-    user_database.activate_user(uuid).await?;
+    user_database
+        .activate_user(uuid)
+        .instrument(tracing::info_span!("db.activate_user"))
+        .await?;
+    tracing::info!("user confirmed signup");
     Ok(Redirect::to("/"))
 }
