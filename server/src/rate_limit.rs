@@ -25,11 +25,19 @@ pub struct UserKeyExtractor;
 impl KeyExtractor for UserKeyExtractor {
     type Key = String;
 
+    fn name(&self) -> &'static str {
+        "user-id"
+    }
+
     fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
         req.extensions()
             .get::<AuthenticatedFor>()
             .map(|auth: &AuthenticatedFor| auth.user_id().to_string())
             .ok_or_else(|| GovernorError::UnableToExtractKey)
+    }
+
+    fn key_name(&self, key: &Self::Key) -> Option<String> {
+        Some(key.clone())
     }
 }
 

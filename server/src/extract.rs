@@ -94,3 +94,50 @@ impl<T: serde::Serialize> IntoResponse for Json<T> {
         axum::Json(self.0).into_response()
     }
 }
+
+/// Extracts the client IP from headers or connection info. Never fails —
+/// returns `None` if we genuinely can't figure out where the request came from.
+pub struct ClientIp(pub Option<String>);
+
+impl<S> FromRequestParts<S> for ClientIp
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        // x-forwarded-for: first IP in the comma-separated list
+        if let Some(forwarded) = parts.headers.get("x-forwarded-for")
+            && let Ok(value) = forwarded.to_str()
+            && let Some(first) = value.split(',').next()
+        {
+            let ip = first.trim();
+            if !ip.is_empty() {
+                return Ok(ClientIp(Some(ip.to_string())));
+            }
+        }
+
+        // x-real-ip
+        if let Some(real_ip) = parts.headers.get("x-real-ip")
+            && let Ok(value) = real_ip.to_str()
+        {
+            let ip = value.trim();
+            if !ip.is_empty() {
+                return Ok(ClientIp(Some(ip.to_string())));
+            }
+        }
+
+        // fall back to ConnectInfo from the socket
+        if let Some(connect_info) = parts
+            .extensions
+            .get::<axum::extract::connect_info::ConnectInfo<std::net::SocketAddr>>()
+        {
+            return Ok(ClientIp(Some(connect_info.0.ip().to_string())));
+        }
+
+        Ok(ClientIp(None))
+    }
+}

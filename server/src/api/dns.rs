@@ -7,6 +7,7 @@ use axum::{
 use fckn_gay_dns::{Interface as DnsInterface, Record as DnsRecord};
 use fckn_gay_user_database::{DatabaseDnsRecord, DnsRecordId, Interface as UserDatabaseInterface};
 use serde::Deserialize;
+use tracing::Instrument;
 
 use crate::{
     auth_cache::AuthenticatedFor, error::AppError, extract::Json, interfaces::PublicSuffix,
@@ -61,6 +62,7 @@ fn validate_record_for_user(
 }
 
 /// Get DNS records for the authenticated user
+#[tracing::instrument(skip_all, fields(user = %authenticed_for.username()))]
 async fn get_records(
     State(interfaces): State<crate::Interfaces>,
     authenticed_for: AuthenticatedFor,
@@ -68,12 +70,14 @@ async fn get_records(
     let records = interfaces
         .user_database
         .get_user_dns_records(authenticed_for.user_id())
+        .instrument(tracing::info_span!("db.get_dns_records"))
         .await?;
     Ok(Json(records))
 }
 
 /// Add a new DNS record for the authenticated user
 /// Transaction-like behavior: DNS provider first, then database, rollback on failure
+#[tracing::instrument(skip_all, fields(user = %authenticed_for.username(), record_name = %req.name))]
 async fn add_record(
     State(interfaces): State<crate::Interfaces>,
     authenticed_for: AuthenticatedFor,
@@ -83,26 +87,37 @@ async fn add_record(
     validate_record_for_user(&req.name, authenticed_for.username(), &interfaces.hostname)?;
 
     // Step 1: Add to DNS provider first
-    let provider_key = interfaces.dns.add_record(req.clone()).await.map_err(|e| {
-        AppError::message(
-            StatusCode::BAD_GATEWAY,
-            "failed to add record to DNS provider",
-        )
-        .with_internal(e)
-    })?;
+    let provider_key = interfaces
+        .dns
+        .add_record(req.clone())
+        .instrument(tracing::info_span!("dns.add_record"))
+        .await
+        .map_err(|e| {
+            AppError::message(
+                StatusCode::BAD_GATEWAY,
+                "failed to add record to DNS provider",
+            )
+            .with_internal(e)
+        })?;
 
     // Step 2: Add to database with provider key
     let provider_key_string = format!("{}", provider_key);
     match interfaces
         .user_database
         .add_dns_record(authenticed_for.user_id(), req, provider_key_string)
+        .instrument(tracing::info_span!("db.add_dns_record"))
         .await
     {
         Ok(record_id) => Ok(Json(record_id)),
         Err(db_error) => {
             // Step 3: Rollback - delete from DNS provider
-            if let Err(rollback_error) = interfaces.dns.delete_record(provider_key).await {
-                tracing::error!("Failed to rollback DNS record: {}", rollback_error);
+            if let Err(rollback_error) = interfaces
+                .dns
+                .delete_record(provider_key)
+                .instrument(tracing::info_span!("dns.rollback_add"))
+                .await
+            {
+                tracing::error!(error = %rollback_error, "failed to rollback DNS record");
             }
             Err(AppError::message(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -115,6 +130,7 @@ async fn add_record(
 
 /// Delete a DNS record for the authenticated user
 /// Transaction-like behavior: Database first, then DNS provider, rollback on failure
+#[tracing::instrument(skip_all, fields(user = %authenticed_for.username(), record_id = ?record_id))]
 async fn delete_record(
     State(interfaces): State<crate::Interfaces>,
     authenticed_for: AuthenticatedFor,
@@ -124,6 +140,7 @@ async fn delete_record(
     let provider_key = interfaces
         .user_database
         .get_dns_record_provider_key(authenticed_for.user_id(), record_id)
+        .instrument(tracing::info_span!("db.get_provider_key"))
         .await
         .map_err(|e| {
             AppError::message(StatusCode::NOT_FOUND, "record not found").with_internal(e)
@@ -131,17 +148,15 @@ async fn delete_record(
 
     // Convert string provider key to the appropriate Key type
     let dns_key = provider_key.parse().map_err(|e: String| {
-        AppError::message(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to parse provider key 💀",
-        )
-        .with_internal(anyhow::anyhow!(e))
+        AppError::message(StatusCode::INTERNAL_SERVER_ERROR, "something went wrong 💀")
+            .with_internal(anyhow::anyhow!(e))
     })?;
 
     // Step 1: Delete from database first
     interfaces
         .user_database
         .delete_dns_record(authenticed_for.user_id(), record_id)
+        .instrument(tracing::info_span!("db.delete_dns_record"))
         .await
         .map_err(|e| {
             AppError::message(
@@ -152,10 +167,15 @@ async fn delete_record(
         })?;
 
     // Step 2: Delete from DNS provider
-    match interfaces.dns.delete_record(dns_key).await {
+    match interfaces
+        .dns
+        .delete_record(dns_key)
+        .instrument(tracing::info_span!("dns.delete_record"))
+        .await
+    {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(dns_error) => {
-            tracing::error!("Failed to delete from DNS provider: {}", dns_error);
+            tracing::error!(error = %dns_error, "failed to delete from DNS provider");
             Err(AppError::message(
                 StatusCode::BAD_GATEWAY,
                 "failed to delete from DNS provider",
@@ -173,6 +193,7 @@ pub struct UpdateRecordRequest {
 
 /// Update a DNS record for the authenticated user
 /// Transaction-like behavior: DNS provider first, then database, rollback on failure
+#[tracing::instrument(skip_all, fields(user = %authenticed_for.username(), record_id = ?req.id, record_name = %req.content.name))]
 async fn update_record(
     State(interfaces): State<crate::Interfaces>,
     authenticed_for: AuthenticatedFor,
@@ -189,6 +210,7 @@ async fn update_record(
     let provider_key = interfaces
         .user_database
         .get_dns_record_provider_key(authenticed_for.user_id(), req.id)
+        .instrument(tracing::info_span!("db.get_provider_key"))
         .await
         .map_err(|e| {
             AppError::message(StatusCode::NOT_FOUND, "record not found").with_internal(e)
@@ -196,17 +218,15 @@ async fn update_record(
 
     // Convert string provider key to the appropriate Key type
     let dns_key = provider_key.parse().map_err(|e: String| {
-        AppError::message(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to parse provider key 💀",
-        )
-        .with_internal(anyhow::anyhow!(e))
+        AppError::message(StatusCode::INTERNAL_SERVER_ERROR, "something went wrong 💀")
+            .with_internal(anyhow::anyhow!(e))
     })?;
 
     // Step 1: Update in DNS provider first
     interfaces
         .dns
         .update_record(dns_key, req.content.clone())
+        .instrument(tracing::info_span!("dns.update_record"))
         .await
         .map_err(|e| {
             AppError::message(
@@ -220,11 +240,12 @@ async fn update_record(
     match interfaces
         .user_database
         .update_dns_record(authenticed_for.user_id(), req.id, req.content.clone())
+        .instrument(tracing::info_span!("db.update_dns_record"))
         .await
     {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(db_error) => {
-            tracing::error!("Failed to update record in database: {}", db_error);
+            tracing::error!(error = %db_error, "failed to update record in database");
             Err(AppError::message(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "failed to update record 💀",

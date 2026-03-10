@@ -11,6 +11,9 @@ pub struct AppError {
     status: StatusCode,
     /// The real error chain for traces/logs — never shown to users
     internal: Option<anyhow::Error>,
+    /// The span that was active when this error was created, so handler fields
+    /// (like user=, record_name=, etc.) are still attached when we log it
+    origin_span: tracing::Span,
 }
 
 impl AppError {
@@ -21,6 +24,7 @@ impl AppError {
             message: message.into(),
             status,
             internal: None,
+            origin_span: tracing::Span::current(),
         }
     }
 
@@ -39,11 +43,21 @@ pub struct ErrorResponse {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        // Re-enter the span so structured fields from the handler are present
+        let _guard = self.origin_span.enter();
+
         let status = self.status.as_u16();
         if let Some(ref internal) = self.internal {
-            tracing::error!("API error ({status}): {} — {internal}", self.message);
+            let err: &(dyn std::error::Error + 'static) = internal.as_ref();
+            match status {
+                400..=499 => tracing::warn!(error = err, status, "{}", self.message),
+                _ => tracing::error!(error = err, status, "{}", self.message),
+            }
         } else {
-            tracing::error!("API error ({status}): {}", self.message);
+            match status {
+                400..=499 => tracing::warn!(status, "{}", self.message),
+                _ => tracing::error!(status, "{}", self.message),
+            }
         }
 
         let body = ErrorResponse {
@@ -65,6 +79,7 @@ where
             message: "something went wrong 💀".to_string(),
             status: StatusCode::INTERNAL_SERVER_ERROR,
             internal: Some(err.into()),
+            origin_span: tracing::Span::current(),
         }
     }
 }

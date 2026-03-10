@@ -7,6 +7,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use fckn_gay_user_database::{Database as UserDatabase, Interface as UserDatabaseInterface};
+use tracing::Instrument;
 
 use crate::{auth_cache::AuthenticationCache, error::AppError, extract::Form};
 
@@ -16,6 +17,7 @@ pub struct Login {
     password: String,
 }
 
+#[tracing::instrument(skip_all, fields(user = %form.username))]
 pub async fn login(
     State(user_database): State<Arc<UserDatabase>>,
     State(auth_cache): State<Arc<AuthenticationCache>>,
@@ -24,6 +26,7 @@ pub async fn login(
 ) -> Result<CookieJar, AppError> {
     if let Some(user_id) = user_database
         .validate_and_get_user_id(&form.username, &form.password)
+        .instrument(tracing::info_span!("db.validate_credentials"))
         .await
     {
         let token = auth_cache
@@ -32,11 +35,13 @@ pub async fn login(
                 user_id,
                 Instant::now() + std::time::Duration::from_secs(60 * 60 * 4),
             )
+            .instrument(tracing::info_span!("cache.create_token"))
             .await
             .ok_or(AppError::message(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "failed to create session 💀",
             ))?;
+        tracing::info!("successfully logged in");
         Ok(jar.add(
             Cookie::build(("login-token", token.clone()))
                 .domain("127.0.0.1")
@@ -51,6 +56,7 @@ pub async fn login(
     }
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn logout(
     State(auth_cache): State<Arc<AuthenticationCache>>,
     jar: CookieJar,
@@ -59,6 +65,7 @@ pub async fn logout(
     if let Some(cookie) = jar.get("login-token") {
         auth_cache.remove_token(cookie.value()).await;
     }
+    tracing::info!("logged out");
     // and remove it from the browsers cookie jar
     let jar = jar.remove(Cookie::build("login-token"));
     (jar, Redirect::to("/"))

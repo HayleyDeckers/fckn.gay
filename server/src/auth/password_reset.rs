@@ -7,6 +7,7 @@ use fckn_gay_user_database::{
 };
 use fckn_gay_validation::validate_password;
 use serde::{Deserialize, Deserializer};
+use tracing::Instrument;
 
 use crate::{
     auth_cache::{AuthenticationCache, PasswordResetCache},
@@ -20,6 +21,7 @@ pub struct PasswordReset {
     username_or_email: String,
 }
 
+#[tracing::instrument(skip_all, fields(target = %form.username_or_email))]
 pub async fn request_password_reset(
     State(email): State<Arc<Email>>,
     State(password_reset_cache): State<PasswordResetCache>,
@@ -27,16 +29,17 @@ pub async fn request_password_reset(
     State(address): State<ServerAddress>,
     Form(form): Form<PasswordReset>,
 ) -> Result<StatusCode, AppError> {
-    tracing::info!("Password reset requested for '{}'", &form.username_or_email);
+    tracing::info!("password reset requested");
     if let Some(user) = user_database
         .get_user_by_username_or_email(&form.username_or_email)
+        .instrument(tracing::info_span!("db.lookup_user"))
         .await?
     {
         if !user.is_active() {
             tracing::warn!(
-                "Password reset requested for non-active user '{}' (state: {:?})",
-                &user.username,
-                user.state
+                user = %user.username,
+                state = ?user.state,
+                "password reset requested for non-active user"
             );
             return Ok(StatusCode::OK);
         }
@@ -46,6 +49,7 @@ pub async fn request_password_reset(
                 user.id,
                 Instant::now() + std::time::Duration::from_secs(15 * 60),
             )
+            .instrument(tracing::info_span!("cache.create_reset_token"))
             .await
             .ok_or(AppError::message(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -65,6 +69,7 @@ pub async fn request_password_reset(
                     &user.username
                 ),
             )
+            .instrument(tracing::info_span!("email.send_reset"))
             .await?;
     }
     Ok(StatusCode::OK)
@@ -92,6 +97,7 @@ impl<'de> Deserialize<'de> for ValidPassword {
     }
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn reset_password(
     State(password_reset_cache): State<PasswordResetCache>,
     State(user_database): State<Arc<UserDatabase>>,
@@ -108,8 +114,12 @@ pub async fn reset_password(
         ))?;
     user_database
         .update_user_password(user_id, PasswordHash::new(&form.new_password.0))
+        .instrument(tracing::info_span!("db.update_password"))
         .await?;
-    auth_cache.invalidate_all_tokens_for_user(user_id).await;
-    tracing::info!("Password reset completed for user '{username}' (ID: {user_id})");
+    auth_cache
+        .invalidate_all_tokens_for_user(user_id)
+        .instrument(tracing::info_span!("cache.invalidate_tokens"))
+        .await;
+    tracing::info!(user = %username, "password reset completed");
     Ok(Json(username))
 }
