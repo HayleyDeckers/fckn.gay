@@ -271,14 +271,14 @@ impl Interfaces {
         // dummy DB + real DNS = data loss city 💀 DNS records will accumulate forever since the
         // in-memory DB forgets everything on restart but Porkbun/etc keeps the actual records.
         if user_database.is_dummy() && !dns.is_dummy() && !dns.is_hickory() {
-            log::warn!(
+            tracing::warn!(
                 "⚠️  DANGEROUS CONFIG: dummy user database + real DNS provider! \
                  DNS records created will be permanently lost on restart since the dummy DB \
                  doesn't persist. Please use the dummy or hickory DNS provider for testing."
             );
         }
 
-        log::info!(
+        tracing::info!(
             "Rate limiting configured: auth={}/{} burst/sec, api={}/{} burst/sec",
             config.rate_limit.auth_burst_size,
             config.rate_limit.auth_per_seconds,
@@ -287,11 +287,11 @@ impl Interfaces {
         );
 
         let turnstile = config.turnstile.map(|tc| {
-            log::info!("Turnstile captcha enabled (site_key={})", tc.site_key);
+            tracing::info!("Turnstile captcha enabled (site_key={})", tc.site_key);
             Arc::new(TurnstileVerifier::new(tc.site_key, tc.secret_key))
         });
         if turnstile.is_none() {
-            log::info!("Turnstile captcha disabled — sign-up is unprotected");
+            tracing::info!("Turnstile captcha disabled — sign-up is unprotected");
         }
 
         Ok(Interfaces {

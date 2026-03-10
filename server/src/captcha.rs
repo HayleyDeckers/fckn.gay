@@ -50,7 +50,7 @@ impl TurnstileVerifier {
 
         let body: SiteverifyResponse = resp.json().await?;
         if !body.success {
-            log::warn!(
+            tracing::warn!(
                 "turnstile verification failed: {:?}",
                 body.error_codes.unwrap_or_default()
             );

@@ -100,7 +100,9 @@ async fn main() -> Result<()> {
     telemetry::logging::init(config.logging.clone());
 
     if args.dummy {
-        log::info!("--dummy mode: using in-memory providers for everything, ignoring config file");
+        tracing::info!(
+            "--dummy mode: using in-memory providers for everything, ignoring config file"
+        );
     }
 
     let address = config.address.clone();
@@ -143,7 +145,7 @@ async fn main() -> Result<()> {
             let listener = tokio::net::TcpListener::bind(&address)
                 .await
                 .context("Failed to bind to address")?;
-            log::info!("starting server on http://{address}");
+            tracing::info!("starting server on http://{address}");
 
             // Each module owns its middleware (auth, rate limiting, etc).
             // main.rs just wires the routers together.

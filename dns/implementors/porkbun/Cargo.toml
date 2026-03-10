@@ -11,5 +11,5 @@ workspace = true
 fckn-gay-dns-interface = { path = "../../interface" }
 fckn-gay-secret = { workspace = true }
 
-porkbun-api = { workspace = true, features = ["default-client"] }
+porkbun-api = { workspace = true, features = ["default-client", "tracing"] }
 serde.workspace = true
