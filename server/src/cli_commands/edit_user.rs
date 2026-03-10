@@ -175,119 +175,123 @@ async fn rename_user(
         return Ok(());
     }
 
-    struct PendingRename {
-        old_provider_key: String,
-        old_record_id: fckn_gay_user_database::DnsRecordId,
-        new_record: fckn_gay_dns::Record,
-    }
-
-    let mut pending: Vec<PendingRename> = db_records
-        .iter()
-        .map(|rec| {
-            let new_name = rename_record_name(&rec.record.name, old_username, new_username, suffix);
-            let mut new_record = rec.record.clone();
-            new_record.name = new_name;
-            PendingRename {
-                old_provider_key: rec.provider_key.clone(),
-                old_record_id: rec.id,
-                new_record,
-            }
-        })
-        .collect();
+    const BACKOFFS: &[u64] = &[1, 2, 4, 16];
 
     let mut succeeded = 0u32;
+    let mut failed = 0u32;
     let mut dangling_old = 0u32;
-    let backoff_durations = [
-        std::time::Duration::from_secs(1),
-        std::time::Duration::from_secs(2),
-        std::time::Duration::from_secs(4),
-        std::time::Duration::from_secs(16),
-    ];
-    let max_attempts = 1 + backoff_durations.len(); // first try + retries
+    let mut failed_names: Vec<String> = Vec::new();
 
-    for attempt in 0..max_attempts {
-        if pending.is_empty() {
-            break;
+    for rec in &db_records {
+        let new_name = rename_record_name(&rec.record.name, old_username, new_username, suffix);
+        let mut new_record = rec.record.clone();
+        new_record.name = new_name;
+
+        eprintln!("  📝 {} -> {}", rec.record.name, new_record.name);
+
+        // 1. add new record upstream (fatal — nothing mutated yet, safe to skip)
+        let mut add_upstream = dns.add_record(new_record.clone()).await;
+        for &secs in BACKOFFS {
+            if add_upstream.is_ok() {
+                break;
+            }
+            eprintln!("    ⏳ retrying add upstream after {secs}s...");
+            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+            add_upstream = dns.add_record(new_record.clone()).await;
         }
+        let new_key = match add_upstream {
+            Ok(key) => key,
+            Err(e) => {
+                eprintln!("    ❌ gave up adding '{}' upstream: {e}", new_record.name);
+                failed += 1;
+                failed_names.push(new_record.name.clone());
+                continue;
+            }
+        };
 
-        if attempt > 0 {
-            let wait = backoff_durations[attempt - 1];
+        // 2. track new record in DB (on failure, roll back step 1)
+        let new_key_str = new_key.to_string();
+        let mut add_db = user_db
+            .add_dns_record(user_id, new_record.clone(), new_key_str.clone())
+            .await;
+        for &secs in BACKOFFS {
+            if add_db.is_ok() {
+                break;
+            }
+            eprintln!("    ⏳ retrying add DB record after {secs}s...");
+            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+            add_db = user_db
+                .add_dns_record(user_id, new_record.clone(), new_key_str.clone())
+                .await;
+        }
+        if add_db.is_err() {
             eprintln!(
-                "  ⏳ retrying {} failed record(s) after {}s...",
-                pending.len(),
-                wait.as_secs()
+                "    ❌ couldn't track '{}' in DB -- rolling back upstream add",
+                new_record.name
             );
-            tokio::time::sleep(wait).await;
-        }
-
-        let mut still_failing = Vec::new();
-
-        for rename in pending.drain(..) {
-            // 1. add new record upstream
-            let new_key = match dns.add_record(rename.new_record.clone()).await {
-                Ok(key) => key,
-                Err(e) => {
-                    eprintln!(
-                        "  ⚠️  failed to add '{}' upstream: {e}",
-                        rename.new_record.name
-                    );
-                    still_failing.push(rename);
-                    continue;
-                }
-            };
-
-            // 2. delete old DB record
-            if let Err(e) = user_db
-                .delete_dns_record(user_id, rename.old_record_id)
-                .await
-            {
+            if let Err(e) = dns.delete_record(new_key.clone()).await {
                 eprintln!(
-                    "  ⚠️  failed to delete old DB record for '{}': {e}",
-                    rename.new_record.name
-                );
-            }
-
-            // 3. add new DB record with new provider key
-            if let Err(e) = user_db
-                .add_dns_record(user_id, rename.new_record.clone(), new_key.to_string())
-                .await
-            {
-                eprintln!(
-                    "  ⚠️  failed to add new DB record for '{}': {e}",
-                    rename.new_record.name
-                );
-            }
-
-            // 4. delete old upstream record (non-fatal)
-            let old_key: fckn_gay_dns::Key = match rename.old_provider_key.parse() {
-                Ok(k) => k,
-                Err(e) => {
-                    eprintln!(
-                        "  ⚠️  can't parse old provider key '{}': {e} -- old record may linger",
-                        rename.old_provider_key
-                    );
-                    dangling_old += 1;
-                    succeeded += 1;
-                    continue;
-                }
-            };
-
-            if let Err(e) = dns.delete_record(old_key).await {
-                eprintln!(
-                    "  ⚠️  failed to delete old upstream record '{}': {e} -- may linger",
-                    rename.old_provider_key
+                    "    ⚠️  rollback failed too: {e} -- upstream record '{}' is now untracked 💀",
+                    new_record.name
                 );
                 dangling_old += 1;
             }
-
-            succeeded += 1;
-            eprintln!("  ✅ renamed record -> {}", rename.new_record.name);
+            failed += 1;
+            failed_names.push(new_record.name.clone());
+            continue;
         }
 
-        pending = still_failing;
+        // 3. delete old record upstream (non-fatal — new record is already live + tracked)
+        let old_key: fckn_gay_dns::Key = match rec.provider_key.parse() {
+            Ok(k) => k,
+            Err(e) => {
+                eprintln!(
+                    "    ⚠️  can't parse old provider key '{}': {e} -- old record may linger",
+                    rec.provider_key
+                );
+                dangling_old += 1;
+                succeeded += 1;
+                continue;
+            }
+        };
+        let mut del_old_upstream = dns.delete_record(old_key.clone()).await;
+        for &secs in BACKOFFS {
+            if del_old_upstream.is_ok() {
+                break;
+            }
+            eprintln!("    ⏳ retrying delete old upstream after {secs}s...");
+            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+            del_old_upstream = dns.delete_record(old_key.clone()).await;
+        }
+        if let Err(e) = del_old_upstream {
+            eprintln!(
+                "    ⚠️  couldn't delete old upstream record '{}': {e} -- may linger",
+                rec.provider_key
+            );
+            dangling_old += 1;
+        }
+
+        // 4. remove old record from DB (non-fatal — it's just stale bookkeeping)
+        let mut del_old_db = user_db.delete_dns_record(user_id, rec.id).await;
+        for &secs in BACKOFFS {
+            if del_old_db.is_ok() {
+                break;
+            }
+            eprintln!("    ⏳ retrying delete old DB record after {secs}s...");
+            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+            del_old_db = user_db.delete_dns_record(user_id, rec.id).await;
+        }
+        if let Err(e) = del_old_db {
+            eprintln!(
+                "    ⚠️  couldn't clean up old DB record for '{}': {e} -- stale entry remains",
+                rec.record.name
+            );
+        }
+
+        succeeded += 1;
+        eprintln!("  ✅ renamed record -> {}", new_record.name);
     }
 
-    let failed = pending.len() as u32;
     eprintln!("\n  === rename summary ===");
     eprintln!("  records renamed:   {succeeded}");
     if dangling_old > 0 {
@@ -295,8 +299,8 @@ async fn rename_user(
     }
     if failed > 0 {
         eprintln!("  records failed:    {failed}");
-        for rename in &pending {
-            eprintln!("    ❌ {}", rename.new_record.name);
+        for name in &failed_names {
+            eprintln!("    ❌ {name}");
         }
     }
 
