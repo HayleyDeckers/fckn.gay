@@ -118,10 +118,13 @@ pub async fn run(
     Ok(())
 }
 
-/// Rename a user: update username in DB + migrate all their DNS records upstream.
+/// Rename a user: update username in DB + update all their DNS records in-place.
 ///
-/// Since Porkbun doesn't support updating records in-place, we do delete + add per record.
-/// Failed upstream adds go to a retry queue with exponential backoff (1s, 2s, 4s).
+/// Each record is processed independently. For every record we:
+///   1. Update the record upstream (retries with backoff, fatal on failure)
+///   2. Update the record in the DB (retries with backoff, rolls back step 1 on failure)
+///
+/// All steps (including rollback) use exponential backoff: 1 s → 2 s → 4 s → 16 s.
 async fn rename_user(
     dns: &Dns,
     user_db: &UserDatabase,
@@ -179,7 +182,6 @@ async fn rename_user(
 
     let mut succeeded = 0u32;
     let mut failed = 0u32;
-    let mut dangling_old = 0u32;
     let mut failed_names: Vec<String> = Vec::new();
 
     for rec in &db_records {
@@ -189,103 +191,84 @@ async fn rename_user(
 
         eprintln!("  📝 {} -> {}", rec.record.name, new_record.name);
 
-        // 1. add new record upstream (fatal — nothing mutated yet, safe to skip)
-        let mut add_upstream = dns.add_record(new_record.clone()).await;
-        for &secs in BACKOFFS {
-            if add_upstream.is_ok() {
-                break;
-            }
-            eprintln!("    ⏳ retrying add upstream after {secs}s...");
-            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
-            add_upstream = dns.add_record(new_record.clone()).await;
-        }
-        let new_key = match add_upstream {
-            Ok(key) => key,
+        let provider_key: fckn_gay_dns::Key = match rec.provider_key.parse() {
+            Ok(k) => k,
             Err(e) => {
-                eprintln!("    ❌ gave up adding '{}' upstream: {e}", new_record.name);
+                eprintln!(
+                    "    ❌ can't parse provider key '{}': {e} -- skipping",
+                    rec.provider_key
+                );
                 failed += 1;
                 failed_names.push(new_record.name.clone());
                 continue;
             }
         };
 
-        // 2. track new record in DB (on failure, roll back step 1)
-        let new_key_str = new_key.to_string();
-        let mut add_db = user_db
-            .add_dns_record(user_id, new_record.clone(), new_key_str.clone())
+        // 1. update record upstream (fatal — nothing mutated yet, safe to skip)
+        let mut update_upstream = dns
+            .update_record(provider_key.clone(), new_record.clone())
             .await;
         for &secs in BACKOFFS {
-            if add_db.is_ok() {
+            if update_upstream.is_ok() {
                 break;
             }
-            eprintln!("    ⏳ retrying add DB record after {secs}s...");
+            eprintln!("    ⏳ retrying update upstream after {secs}s...");
             tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
-            add_db = user_db
-                .add_dns_record(user_id, new_record.clone(), new_key_str.clone())
+            update_upstream = dns
+                .update_record(provider_key.clone(), new_record.clone())
                 .await;
         }
-        if add_db.is_err() {
+        if let Err(e) = update_upstream {
             eprintln!(
-                "    ❌ couldn't track '{}' in DB -- rolling back upstream add",
+                "    ❌ gave up updating '{}' upstream: {e}",
                 new_record.name
             );
-            if let Err(e) = dns.delete_record(new_key.clone()).await {
-                eprintln!(
-                    "    ⚠️  rollback failed too: {e} -- upstream record '{}' is now untracked 💀",
-                    new_record.name
-                );
-                dangling_old += 1;
-            }
             failed += 1;
             failed_names.push(new_record.name.clone());
             continue;
         }
 
-        // 3. delete old record upstream (non-fatal — new record is already live + tracked)
-        let old_key: fckn_gay_dns::Key = match rec.provider_key.parse() {
-            Ok(k) => k,
-            Err(e) => {
+        // 2. update record in DB (on failure, roll back step 1)
+        let mut update_db = user_db
+            .update_dns_record(user_id, rec.id, new_record.clone())
+            .await;
+        for &secs in BACKOFFS {
+            if update_db.is_ok() {
+                break;
+            }
+            eprintln!("    ⏳ retrying update DB record after {secs}s...");
+            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+            update_db = user_db
+                .update_dns_record(user_id, rec.id, new_record.clone())
+                .await;
+        }
+        if let Err(e) = update_db {
+            eprintln!(
+                "    ❌ couldn't update '{}' in DB: {e} -- rolling back upstream",
+                new_record.name
+            );
+            let mut rollback = dns
+                .update_record(provider_key.clone(), rec.record.clone())
+                .await;
+            for &secs in BACKOFFS {
+                if rollback.is_ok() {
+                    break;
+                }
+                eprintln!("    ⏳ retrying rollback after {secs}s...");
+                tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+                rollback = dns
+                    .update_record(provider_key.clone(), rec.record.clone())
+                    .await;
+            }
+            if let Err(rb_err) = rollback {
                 eprintln!(
-                    "    ⚠️  can't parse old provider key '{}': {e} -- old record may linger",
-                    rec.provider_key
+                    "    💀 rollback failed: {rb_err} -- upstream record '{}' is now out of sync with DB",
+                    new_record.name
                 );
-                dangling_old += 1;
-                succeeded += 1;
-                continue;
             }
-        };
-        let mut del_old_upstream = dns.delete_record(old_key.clone()).await;
-        for &secs in BACKOFFS {
-            if del_old_upstream.is_ok() {
-                break;
-            }
-            eprintln!("    ⏳ retrying delete old upstream after {secs}s...");
-            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
-            del_old_upstream = dns.delete_record(old_key.clone()).await;
-        }
-        if let Err(e) = del_old_upstream {
-            eprintln!(
-                "    ⚠️  couldn't delete old upstream record '{}': {e} -- may linger",
-                rec.provider_key
-            );
-            dangling_old += 1;
-        }
-
-        // 4. remove old record from DB (non-fatal — it's just stale bookkeeping)
-        let mut del_old_db = user_db.delete_dns_record(user_id, rec.id).await;
-        for &secs in BACKOFFS {
-            if del_old_db.is_ok() {
-                break;
-            }
-            eprintln!("    ⏳ retrying delete old DB record after {secs}s...");
-            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
-            del_old_db = user_db.delete_dns_record(user_id, rec.id).await;
-        }
-        if let Err(e) = del_old_db {
-            eprintln!(
-                "    ⚠️  couldn't clean up old DB record for '{}': {e} -- stale entry remains",
-                rec.record.name
-            );
+            failed += 1;
+            failed_names.push(new_record.name.clone());
+            continue;
         }
 
         succeeded += 1;
@@ -294,9 +277,6 @@ async fn rename_user(
 
     eprintln!("\n  === rename summary ===");
     eprintln!("  records renamed:   {succeeded}");
-    if dangling_old > 0 {
-        eprintln!("  old records left:  {dangling_old} (may need manual cleanup)");
-    }
     if failed > 0 {
         eprintln!("  records failed:    {failed}");
         for name in &failed_names {

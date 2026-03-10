@@ -46,18 +46,71 @@ impl PorkbunDns {
             fckn_gay_dns_interface::RecordType::TXT => porkbun_api::DnsRecordType::TXT,
         }
     }
+
+    fn convert_record_type_from_porkbun(
+        record_type: porkbun_api::DnsRecordType,
+    ) -> fckn_gay_dns_interface::RecordType {
+        match record_type {
+            porkbun_api::DnsRecordType::A => fckn_gay_dns_interface::RecordType::A,
+            porkbun_api::DnsRecordType::AAAA => fckn_gay_dns_interface::RecordType::AAAA,
+            porkbun_api::DnsRecordType::ALIAS => fckn_gay_dns_interface::RecordType::ALIAS,
+            porkbun_api::DnsRecordType::CAA => fckn_gay_dns_interface::RecordType::CAA,
+            porkbun_api::DnsRecordType::CNAME => fckn_gay_dns_interface::RecordType::CNAME,
+            porkbun_api::DnsRecordType::HTTPS => fckn_gay_dns_interface::RecordType::HTTPS,
+            porkbun_api::DnsRecordType::MX => fckn_gay_dns_interface::RecordType::MX,
+            porkbun_api::DnsRecordType::NS => fckn_gay_dns_interface::RecordType::NS,
+            porkbun_api::DnsRecordType::SRV => fckn_gay_dns_interface::RecordType::SRV,
+            porkbun_api::DnsRecordType::SVCB => fckn_gay_dns_interface::RecordType::SVCB,
+            porkbun_api::DnsRecordType::TLSA => fckn_gay_dns_interface::RecordType::TLSA,
+            porkbun_api::DnsRecordType::TXT => fckn_gay_dns_interface::RecordType::TXT,
+        }
+    }
+
+    /// Validate subdomain and build a `CreateOrEditDnsRecord` command from our `Record` type.
+    fn build_cmd<'a>(
+        &self,
+        record: &'a Record,
+    ) -> Result<(&'a str, porkbun_api::CreateOrEditDnsRecord<'a>), Error> {
+        let subdomain = record
+            .name
+            .strip_suffix(self.domain.as_str())
+            .ok_or_else(|| Error::SubdomainMismatch {
+                name: record.name.clone(),
+                domain: self.domain.clone(),
+            })?;
+        let subdomain = subdomain.strip_suffix('.').unwrap_or(subdomain);
+        if !subdomain.is_ascii() {
+            return Err(Error::NonAsciiSubdomain {
+                name: record.name.clone(),
+            });
+        }
+        let cmd = porkbun_api::CreateOrEditDnsRecord {
+            subdomain: Some(subdomain),
+            record_type: Self::convert_record_type_to_porkbun(record.record_type),
+            content: record.content.clone().into(),
+            ttl: Some(record.ttl_seconds.into()),
+            prio: record.priority.unwrap_or(0).into(),
+        };
+        Ok((subdomain, cmd))
+    }
 }
 
 pub enum Error {
     Api(ApiError<DefaultTransportError>),
-    Other(String),
+    SubdomainMismatch { name: String, domain: String },
+    NonAsciiSubdomain { name: String },
 }
 
 impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Api(e) => write!(f, "Porkbun API returned an error: {e:?}"),
-            Error::Other(s) => write!(f, "{s}"),
+            Error::Api(e) => write!(f, "Porkbun API error: {e:?}"),
+            Error::SubdomainMismatch { name, domain } => {
+                write!(f, "'{name}' doesn't end with domain '{domain}'")
+            }
+            Error::NonAsciiSubdomain { name } => {
+                write!(f, "'{name}' contains non-ASCII characters")
+            }
         }
     }
 }
@@ -66,7 +119,12 @@ impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Api(_) => write!(f, "Porkbun API returned an error"),
-            Error::Other(s) => write!(f, "{s}"),
+            Error::SubdomainMismatch { name, domain } => {
+                write!(f, "'{name}' doesn't end with domain '{domain}'")
+            }
+            Error::NonAsciiSubdomain { name } => {
+                write!(f, "'{name}' contains non-ASCII characters")
+            }
         }
     }
 }
@@ -75,7 +133,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::Api(e) => Some(e),
-            Error::Other(_) => None,
+            _ => None,
         }
     }
 }
@@ -91,7 +149,6 @@ impl Dns for PorkbunDns {
     type Error = Error;
     type Key = String;
 
-    /// Creates a new instance of the DNS provider with the given configuration.
     fn new(config: Self::Config) -> Result<Self, Self::Error> {
         let Config {
             domain,
@@ -105,33 +162,12 @@ impl Dns for PorkbunDns {
         Ok(PorkbunDns { client, domain })
     }
 
-    /// Adds a DNS record to the provider.
     async fn add_record(&self, record: Record) -> Result<Self::Key, Self::Error> {
-        let Some(subdomain) = record.name.strip_suffix(self.domain.as_str()) else {
-            return Err(Error::Other(format!(
-                "The subdomain {} does not end with the domain {}",
-                record.name, self.domain
-            )));
-        };
-        let subdomain = subdomain.strip_suffix('.').unwrap_or(subdomain);
-        if !subdomain.is_ascii() {
-            return Err(Error::Other(format!(
-                "The domain {} contains non-ascii characters",
-                record.name
-            )));
-        }
-        let cmd = porkbun_api::CreateOrEditDnsRecord {
-            subdomain: Some(subdomain),
-            record_type: Self::convert_record_type_to_porkbun(record.record_type),
-            content: record.content.into(),
-            ttl: Some(record.ttl_seconds.into()),
-            prio: record.priority.unwrap_or(0).into(),
-        };
-        let response = self.client.create(&self.domain, cmd).await?;
-        Ok(response)
+        let (_, cmd) = self.build_cmd(&record)?;
+        let id = self.client.create(&self.domain, cmd).await?;
+        Ok(id)
     }
 
-    /// Deletes a DNS record from the provider.
     async fn delete_record(&self, key: Self::Key) -> Result<(), Self::Error> {
         self.client
             .delete(&self.domain, &key)
@@ -139,7 +175,6 @@ impl Dns for PorkbunDns {
             .map_err(Error::from)
     }
 
-    /// Lists all DNS records for a domain.
     async fn list_records(&self) -> Result<Vec<(Self::Key, Record)>, Self::Error> {
         let records = self.client.get_all(&self.domain).await?;
         Ok(records
@@ -149,42 +184,7 @@ impl Dns for PorkbunDns {
                     r.id.clone(),
                     Record {
                         name: r.name,
-                        record_type: match r.record_type {
-                            porkbun_api::DnsRecordType::A => fckn_gay_dns_interface::RecordType::A,
-                            porkbun_api::DnsRecordType::AAAA => {
-                                fckn_gay_dns_interface::RecordType::AAAA
-                            }
-                            porkbun_api::DnsRecordType::ALIAS => {
-                                fckn_gay_dns_interface::RecordType::ALIAS
-                            }
-                            porkbun_api::DnsRecordType::CAA => {
-                                fckn_gay_dns_interface::RecordType::CAA
-                            }
-                            porkbun_api::DnsRecordType::CNAME => {
-                                fckn_gay_dns_interface::RecordType::CNAME
-                            }
-                            porkbun_api::DnsRecordType::HTTPS => {
-                                fckn_gay_dns_interface::RecordType::HTTPS
-                            }
-                            porkbun_api::DnsRecordType::MX => {
-                                fckn_gay_dns_interface::RecordType::MX
-                            }
-                            porkbun_api::DnsRecordType::NS => {
-                                fckn_gay_dns_interface::RecordType::NS
-                            }
-                            porkbun_api::DnsRecordType::SRV => {
-                                fckn_gay_dns_interface::RecordType::SRV
-                            }
-                            porkbun_api::DnsRecordType::SVCB => {
-                                fckn_gay_dns_interface::RecordType::SVCB
-                            }
-                            porkbun_api::DnsRecordType::TLSA => {
-                                fckn_gay_dns_interface::RecordType::TLSA
-                            }
-                            porkbun_api::DnsRecordType::TXT => {
-                                fckn_gay_dns_interface::RecordType::TXT
-                            }
-                        },
+                        record_type: Self::convert_record_type_from_porkbun(r.record_type),
                         content: r.content,
                         ttl_seconds: r.ttl as u32,
                         priority: Some(r.prio as u16),
@@ -194,12 +194,9 @@ impl Dns for PorkbunDns {
             .collect())
     }
 
-    #[allow(unused_variables)]
-    /// Updates a DNS record
     async fn update_record(&self, key: Self::Key, record: Record) -> Result<(), Self::Error> {
-        // TODO: Implement update_record for Porkbun provider
-        Err(Error::Other(
-            "update_record not implemented for Porkbun provider".to_string(),
-        ))
+        let (_, cmd) = self.build_cmd(&record)?;
+        self.client.edit(&self.domain, &key, cmd).await?;
+        Ok(())
     }
 }
