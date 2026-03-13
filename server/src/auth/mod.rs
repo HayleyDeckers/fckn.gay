@@ -15,7 +15,7 @@ pub fn router(appstate: Interfaces) -> Router<Interfaces> {
         .route("/logout", axum::routing::get(login::logout))
         .route("/signup", axum::routing::post(signup::sign_up))
         .route(
-            "/confirm-signup/{uuid}",
+            "/confirm-signup",
             axum::routing::get(signup::confirm_sign_up),
         )
         .route(
