@@ -112,7 +112,7 @@ pub async fn sign_up(
                 "Hello {},\n\
                 Thank you for signing up for an account at fckn.gay.\n\
                 Please click the following link to activate your account:\n\
-                http://{address}/confirm-signup/{uuid:?}\n\
+                http://{address}/confirm-signup?token={uuid:?}\n\
                 \n\
                 if you did not sign up for an account, please ignore this email.",
                 &form.username
@@ -125,13 +125,18 @@ pub async fn sign_up(
     Ok(StatusCode::CREATED)
 }
 
+#[derive(serde::Deserialize)]
+pub struct ConfirmSignup {
+    token: fckn_gay_user_database::Uuid,
+}
+
 #[tracing::instrument(skip_all)]
 pub async fn confirm_sign_up(
     State(user_database): State<Arc<UserDatabase>>,
-    axum::extract::Path(uuid): axum::extract::Path<fckn_gay_user_database::Uuid>,
+    extract::Query(query): extract::Query<ConfirmSignup>,
 ) -> Result<Redirect, AppError> {
     user_database
-        .activate_user(uuid)
+        .activate_user(query.token)
         .instrument(tracing::info_span!("db.activate_user"))
         .await?;
     tracing::info!("user confirmed signup");
