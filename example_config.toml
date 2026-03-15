@@ -115,3 +115,30 @@ auth_per_seconds = 60 # seconds to replenish one request slot
 # More generous limits since these are legitimate users
 api_burst_size = 30  # max requests before rate limiting kicks in
 api_per_seconds = 60 # seconds to replenish one request slot
+
+# Distributed tracing via OpenTelemetry (requires --features otel to compile).
+# If the otel feature is not enabled and provider != "disabled", the server
+# logs an error at startup but continues running without distributed tracing.
+[tracing]
+provider = "disabled"           # "disabled", "stdout" (debug), or "otlp"
+# Accept W3C traceparent/tracestate headers from incoming requests?
+# Only enable when behind a trusted proxy — otherwise anyone on the internet
+# can inject themselves into your traces. Works with and without OTel.
+trust_incoming_spans = false
+# How many hex chars of the trace ID to show in log output (1-32, default 8).
+trace_id_chars = 8
+# Max level for the OTel tracing layer, independent from [logging].level.
+# e.g. set this to "debug" to capture debug-level spans in traces while
+# keeping log output at "info". Accepts: trace, debug, info, warn, error, off.
+level = "info"
+
+# OTLP-specific configuration — only used when provider = "otlp"
+[tracing.otlp]
+endpoint = "http://localhost:4317"
+service_name = "fckn-gay-server"
+
+# Custom headers for authenticating to hosted collectors.
+# Values support all Secret formats: direct string, { env = "VAR" }, { file = "/path" }
+# [tracing.otlp.headers]
+# x-honeycomb-team = { env = "HONEYCOMB_API_KEY" }
+# Authorization = "Bearer my-grafana-token"

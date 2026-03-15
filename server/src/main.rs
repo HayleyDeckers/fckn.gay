@@ -10,22 +10,31 @@ mod rate_limit;
 mod telemetry;
 mod user_routes;
 
-use std::{any::Any, net::SocketAddr, panic, path::PathBuf};
+use std::{net::SocketAddr, panic, path::PathBuf};
 
 use anyhow::{Context, Result};
-use axum::{body::Body, response::Response};
+use axum::{
+    Json,
+    body::Body,
+    response::{IntoResponse, Response},
+};
 use clap::Parser;
 use interfaces::{Config, Interfaces};
 use tower_http::{catch_panic::CatchPanicLayer, trace::TraceLayer};
 
-/// CatchPanicLayer handler — just returns the JSON response.
+use crate::error::ErrorResponse;
+
+/// CatchPanicLayer handler — returns JSON error with trace_id if available.
 /// Actual panic logging happens in the panic hook set in main().
-fn panic_response(_panic: Box<dyn Any + Send + 'static>) -> Response<Body> {
-    Response::builder()
-        .status(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
-        .header("content-type", "application/json")
-        .body(Body::from(r#"{"error":"server ded RIP 💀"}"#))
-        .unwrap()
+fn panic_response(_panic: Box<dyn std::any::Any + Send + 'static>) -> Response<Body> {
+    (
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error: "server ded RIP 💀".to_string(),
+            trace_id: telemetry::current_trace_id(),
+        }),
+    )
+        .into_response()
 }
 
 #[derive(Parser, Debug)]
@@ -83,7 +92,38 @@ async fn main() -> Result<()> {
         Config::load_from_file(&args.config)?
     };
 
-    telemetry::logging::SubscriberBuilder::new(config.logging.clone()).init();
+    // Build the subscriber: fmt layer for logs, plus an optional OTel layer
+    // when compiled with --features otel and the config says so.
+    // OTel provider setup happens before init (it needs to be wired into the
+    // subscriber), so log messages are deferred and emitted after init.
+    let subscriber = telemetry::logging::SubscriberBuilder::new(config.logging.clone());
+
+    #[cfg(feature = "otel")]
+    let otel_output = telemetry::build_provider(&config.tracing);
+    #[cfg(feature = "otel")]
+    let otel_provider_handle = otel_output.provider.clone();
+    #[cfg(feature = "otel")]
+    let subscriber = if let Some(provider) = otel_output.provider {
+        subscriber.with_otel(provider, config.tracing.level.0)
+    } else {
+        subscriber
+    };
+
+    subscriber.init();
+
+    // Now that the subscriber is live, emit deferred OTel setup messages
+    #[cfg(feature = "otel")]
+    telemetry::log_deferred_messages(otel_output.messages);
+
+    #[cfg(not(feature = "otel"))]
+    if config.tracing.provider != telemetry::tracing_setup::TracingBackend::Disabled {
+        tracing::error!(
+            provider = ?config.tracing.provider,
+            "tracing provider is set but the `otel` feature isn't compiled in — \
+             distributed tracing will be disabled. Rebuild with `--features otel` \
+             or set provider = \"disabled\"."
+        );
+    }
 
     // Log panics with tracing so they get span context + structured fields
     panic::set_hook(Box::new(|panic_info| {
@@ -104,6 +144,9 @@ async fn main() -> Result<()> {
     }
 
     let address = config.address.clone();
+    let trust_incoming_spans = config.tracing.trust_incoming_spans;
+    let trace_id_chars = config.tracing.trace_id_chars;
+
     let interfaces = Interfaces::new(config)?;
 
     match args.command {
@@ -145,8 +188,23 @@ async fn main() -> Result<()> {
                 .context("Failed to bind to address")?;
             tracing::info!("starting server on http://{address}");
 
+            // Always-on request spans — OTel adds W3C context extraction on top
+            #[cfg(feature = "otel")]
             let trace_layer = TraceLayer::new_for_http()
-                .make_span_with(telemetry::tracing_setup::MakeRequestSpan)
+                .make_span_with(telemetry::tracing_setup::OtelMakeSpan {
+                    trust_incoming_spans,
+                    trace_id_chars,
+                })
+                .on_request(())
+                .on_response(telemetry::tracing_setup::RecordStatusOnResponse)
+                .on_failure(());
+
+            #[cfg(not(feature = "otel"))]
+            let trace_layer = TraceLayer::new_for_http()
+                .make_span_with(telemetry::tracing_setup::MakeRequestSpan {
+                    trust_incoming_spans,
+                    trace_id_chars,
+                })
                 .on_request(())
                 .on_response(telemetry::tracing_setup::RecordStatusOnResponse)
                 .on_failure(());
@@ -195,6 +253,13 @@ async fn main() -> Result<()> {
             )
             .await
             .context("Failed to start server")?;
+        }
+    }
+
+    #[cfg(feature = "otel")]
+    if let Some(provider) = otel_provider_handle {
+        if let Err(e) = provider.shutdown() {
+            eprintln!("OTel provider shutdown error: {e}");
         }
     }
 

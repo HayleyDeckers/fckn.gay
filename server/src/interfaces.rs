@@ -1,4 +1,4 @@
-use std::{fmt::Display, path::Path, sync::Arc};
+use std::{collections::HashMap, fmt::Display, path::Path, sync::Arc};
 
 use anyhow::{Context, Result};
 use axum::extract::FromRef;
@@ -74,6 +74,11 @@ impl RateLimitConfig {
 #[derive(Clone, Debug)]
 pub struct LogFilter(EnvFilter);
 
+/// A simple max-level filter for the OTel tracing layer.
+/// Accepts level names: "trace", "debug", "info", "warn", "error", "off".
+#[derive(Clone, Copy, Debug)]
+pub struct TracingLevel(pub tracing::level_filters::LevelFilter);
+
 impl Default for LogFilter {
     fn default() -> Self {
         Self(EnvFilter::new("fckn_gay=debug,info"))
@@ -96,6 +101,24 @@ impl<'de> Deserialize<'de> for LogFilter {
         EnvFilter::try_new(&s)
             .map_err(serde::de::Error::custom)
             .map(LogFilter)
+    }
+}
+
+impl Default for TracingLevel {
+    fn default() -> Self {
+        Self(tracing::level_filters::LevelFilter::INFO)
+    }
+}
+
+impl<'de> Deserialize<'de> for TracingLevel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse::<tracing::level_filters::LevelFilter>()
+            .map(TracingLevel)
+            .map_err(serde::de::Error::custom)
     }
 }
 
@@ -164,6 +187,10 @@ pub struct Config {
     /// Optional Cloudflare Turnstile captcha for sign-up protection.
     /// If absent, sign-up works without captcha.
     pub turnstile: Option<TurnstileConfig>,
+    /// Tracing config — trust_incoming_spans is always available, OTel-specific
+    /// fields (backend, endpoint, headers) only compile with --features otel.
+    #[serde(default)]
+    pub tracing: TracingConfig,
 }
 
 impl Config {
@@ -186,7 +213,90 @@ impl Config {
             logging: LoggingConfig::default(),
             rate_limit: RateLimitConfig::default(),
             turnstile: None,
+            tracing: TracingConfig::default(),
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TracingConfig {
+    /// Which tracing backend to use: "disabled", "stdout", or "otlp".
+    #[serde(default)]
+    pub provider: crate::telemetry::tracing_setup::TracingBackend,
+    /// When true, extract W3C trace context (traceparent/tracestate) from
+    /// incoming requests so the request span uses the caller's trace ID.
+    /// Only enable when the server sits behind a trusted proxy — accepting
+    /// trace IDs from the public internet lets anyone inject into your traces.
+    #[serde(default)]
+    pub trust_incoming_spans: bool,
+    /// How many hex characters of the trace ID to show in log output.
+    /// Applies to random IDs, traceparent extraction, and OTel trace IDs.
+    #[serde(default = "TracingConfig::default_trace_id_chars", deserialize_with = "deserialize_trace_id_chars")]
+    pub trace_id_chars: usize,
+    /// Max level for the OTel tracing layer, independent from the logging level.
+    /// e.g. gather traces at "debug" while only printing logs at "info".
+    #[serde(default)]
+    pub level: TracingLevel,
+    /// Provider-specific config for the OTLP backend.
+    #[serde(default)]
+    pub otlp: OtlpConfig,
+}
+
+/// OTLP-specific configuration — only used when `provider = "otlp"`.
+#[derive(Debug, Deserialize)]
+pub struct OtlpConfig {
+    #[serde(default = "OtlpConfig::default_endpoint")]
+    pub endpoint: String,
+    #[serde(default = "OtlpConfig::default_service_name")]
+    pub service_name: String,
+    /// Custom headers for authenticating to hosted collectors.
+    /// Values support all Secret formats: direct string, { env = "VAR" }, { file = "/path" }
+    #[serde(default)]
+    pub headers: HashMap<String, fckn_gay_secret::Secret>,
+}
+
+impl Default for TracingConfig {
+    fn default() -> Self {
+        Self {
+            provider: Default::default(),
+            trust_incoming_spans: false,
+            trace_id_chars: Self::default_trace_id_chars(),
+            level: TracingLevel::default(),
+            otlp: OtlpConfig::default(),
+        }
+    }
+}
+
+impl TracingConfig {
+    fn default_trace_id_chars() -> usize {
+        8
+    }
+}
+
+fn deserialize_trace_id_chars<'de, D: Deserializer<'de>>(d: D) -> Result<usize, D::Error> {
+    let n = usize::deserialize(d)?;
+    if n == 0 {
+        return Err(serde::de::Error::custom("trace_id_chars must be at least 1"));
+    }
+    Ok(n)
+}
+
+impl Default for OtlpConfig {
+    fn default() -> Self {
+        Self {
+            endpoint: Self::default_endpoint(),
+            service_name: Self::default_service_name(),
+            headers: HashMap::new(),
+        }
+    }
+}
+
+impl OtlpConfig {
+    fn default_endpoint() -> String {
+        "http://localhost:4317".to_string()
+    }
+    fn default_service_name() -> String {
+        "fckn-gay-server".to_string()
     }
 }
 
