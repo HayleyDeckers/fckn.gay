@@ -23,7 +23,7 @@ use smallvec::SmallVec;
 use tracing::{Event, Level, Subscriber, field};
 use tracing_log::NormalizeEvent;
 use tracing_subscriber::{
-    Layer,
+    Layer, Registry,
     fmt::{FmtContext, FormatEvent, FormatFields, format::Writer, time::FormatTime},
     registry::LookupSpan,
 };
@@ -361,13 +361,19 @@ where
         }
 
         // (span_name, field_name, value) — all borrowed, no cloning
+        // Intercept `trace_id` — rendered after the {fields} block, not inside it
         let mut fields: SmallVec<[(&str, &str, &str); 16]> = SmallVec::new();
+        let mut trace_id_value: Option<&str> = None;
 
         for (span, ext) in spans.iter().zip(guards.iter()) {
             if let Some(storage) = ext.get::<SpanFieldStorage>() {
                 for (name, value) in &storage.0 {
                     if !value.is_empty() {
-                        fields.push((span.name(), *name, value.as_str()));
+                        if *name == "trace_id" && trace_id_value.is_none() {
+                            trace_id_value = Some(value.as_str());
+                        } else {
+                            fields.push((span.name(), *name, value.as_str()));
+                        }
                     }
                 }
             }
@@ -426,6 +432,16 @@ where
                 write!(writer, "{DIM}}}{RESET}")?;
             } else {
                 write!(writer, "}}")?;
+            }
+        }
+
+        // Trace ID — shown after message + fields for easy grep without
+        // disrupting level/CAUSE column alignment
+        if let Some(tid) = trace_id_value {
+            if ansi {
+                write!(writer, " {DIM}[{tid}]{RESET}")?;
+            } else {
+                write!(writer, " [{tid}]")?;
             }
         }
 
@@ -515,6 +531,29 @@ fn build_error_chain(err: &dyn std::error::Error) -> (String, SmallVec<[String; 
     let mut causes: SmallVec<[String; 4]> = SmallVec::new();
     causes.extend(parts);
     (root, causes)
+}
+
+/// Read a field value from the current span's scope (walks from current to root).
+/// Returns the first non-empty match. Used by the server to surface trace_id
+/// in error responses without depending on OTel.
+pub fn get_current_span_field(name: &str) -> Option<String> {
+    let span = tracing::Span::current();
+    span.with_subscriber(|(id, dispatch)| {
+        let registry = dispatch.downcast_ref::<Registry>()?;
+        let span_ref = registry.span(id)?;
+        for ancestor in span_ref.scope() {
+            let extensions = ancestor.extensions();
+            if let Some(storage) = extensions.get::<SpanFieldStorage>() {
+                if let Some((_, value)) = storage.0.iter().find(|(n, _)| *n == name) {
+                    if !value.is_empty() {
+                        return Some(value.clone());
+                    }
+                }
+            }
+        }
+        None
+    })
+    .flatten()
 }
 
 /// A no-op `FormatFields` — [`FlattenedFormatter`] handles all field

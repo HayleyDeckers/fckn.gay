@@ -5,14 +5,17 @@ use axum::{
 };
 use serde::Serialize;
 
+use crate::telemetry;
+
 pub struct AppError {
     /// What the user sees — keep it silly but informative, never leak internals
     message: String,
     status: StatusCode,
     /// The real error chain for traces/logs — never shown to users
     internal: Option<anyhow::Error>,
-    /// The span that was active when this error was created, so handler fields
-    /// (like user=, record_name=, etc.) are still attached when we log it
+    /// The span that was active when this error was created, so the log line
+    /// gets the handler's fields (user, record, etc.) even though
+    /// `into_response()` runs after the handler span is dropped.
     origin_span: tracing::Span,
 }
 
@@ -39,19 +42,25 @@ impl AppError {
 #[derive(Serialize)]
 pub struct ErrorResponse {
     pub error: String,
+    pub trace_id: Option<String>,
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        // Re-enter the span so structured fields from the handler are present
+        // Re-enter the span that was active when this error was created so the
+        // log line picks up handler fields (user, record, etc.) that would
+        // otherwise be lost because `into_response()` runs after the handler returns.
         let _guard = self.origin_span.enter();
 
+        // Log the error once — pass the raw error to tracing and let the
+        // formatter's `record_error` visitor walk the chain + deduplicate.
+        // Status goes as an event field so it folds into the `{}` block.
         let status = self.status.as_u16();
         if let Some(ref internal) = self.internal {
             let err: &(dyn std::error::Error + 'static) = internal.as_ref();
             match status {
-                400..=499 => tracing::warn!(error = err, status, "{}", self.message),
-                _ => tracing::error!(error = err, status, "{}", self.message),
+                400..=499 => tracing::warn!(error = err, status),
+                _ => tracing::error!(error = err, status),
             }
         } else {
             match status {
@@ -60,8 +69,11 @@ impl IntoResponse for AppError {
             }
         }
 
+        let trace_id = telemetry::current_trace_id();
+
         let body = ErrorResponse {
             error: self.message,
+            trace_id,
         };
 
         (self.status, Json(body)).into_response()

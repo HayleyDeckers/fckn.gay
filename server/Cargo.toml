@@ -7,6 +7,16 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+otel = [
+  "dep:opentelemetry",
+  "dep:opentelemetry-otlp",
+  "dep:opentelemetry-stdout",
+  "dep:opentelemetry_sdk",
+  "dep:tonic",
+  "dep:tracing-opentelemetry",
+]
+
 [dependencies]
 # interfaces
 fckn-gay-dns = { workspace = true, features = ["dummy"] }
@@ -23,12 +33,18 @@ axum-extra = { workspace = true, features = ["cookie"] }
 clap = { version = "4.5.60", features = ["derive"] }
 getrandom.workspace = true
 governor.workspace = true
+opentelemetry = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+opentelemetry-stdout = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
 reqwest.workspace = true
 serde.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tonic = { workspace = true, optional = true }
 toml.workspace = true
 tower-http = { workspace = true, features = ["catch-panic", "fs", "trace"] }
 tower_governor = { workspace = true, features = ["tracing"] }
 tracing.workspace = true
+tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber.workspace = true
 uuid.workspace = true
